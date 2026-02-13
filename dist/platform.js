@@ -1,4 +1,4 @@
-import { STATO_LABELS, ERROR_CODES } from './types.js';
+import { STATO, STATO_LABELS, ERROR_CODES } from './types.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -138,6 +138,16 @@ export class FourHeatPlatform {
         return success;
     }
     async turnOn() {
+        if (this.deviceState?.stato === STATO.BLOCK) {
+            this.log.info('Stove is blocked, resetting error before turning on...');
+            await this.client.resetError();
+            await this.poll();
+            if (this.deviceState?.stato === STATO.BLOCK) {
+                this.log.warn('Error reset failed, stove still blocked');
+                return false;
+            }
+            this.log.info('Error reset successful, turning on...');
+        }
         const success = await this.client.turnOn();
         if (success) {
             await this.poll();

@@ -1,4 +1,5 @@
-import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO } from './types.js';
+import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
+import { applyPosPunto } from './protocol.js';
 export class StoveAccessory {
     platform;
     accessory;
@@ -12,12 +13,13 @@ export class StoveAccessory {
         STATO.RECOVER_IGNITION,
     ]);
     thermostatService;
-    errorResetService;
+    defaultName;
+    roomTempService = null;
     constructor(platform, accessory) {
         this.platform = platform;
         this.accessory = accessory;
         const { Service, Characteristic } = platform;
-        // Accessory Information
+        this.defaultName = platform.config.name || '4HEAT Stove';
         accessory.getService(Service.AccessoryInformation)
             .setCharacteristic(Characteristic.Manufacturer, '4HEAT / TiEmme Elettronica')
             .setCharacteristic(Characteristic.Model, 'PinKEY in box')
@@ -25,7 +27,7 @@ export class StoveAccessory {
         // --- Thermostat service ---
         this.thermostatService = accessory.getService(Service.Thermostat)
             ?? accessory.addService(Service.Thermostat);
-        this.thermostatService.setCharacteristic(Characteristic.Name, platform.config.name || '4HEAT Stove');
+        this.thermostatService.setCharacteristic(Characteristic.Name, this.defaultName);
         this.thermostatService.getCharacteristic(Characteristic.CurrentHeatingCoolingState)
             .onGet(() => this.getCurrentHeatingState());
         this.thermostatService.getCharacteristic(Characteristic.TargetHeatingCoolingState)
@@ -54,13 +56,11 @@ export class StoveAccessory {
         this.thermostatService.addOptionalCharacteristic(Characteristic.StatusFault);
         this.thermostatService.getCharacteristic(Characteristic.StatusFault)
             .onGet(() => this.getStatusFault());
-        // --- Error Reset switch (linked to Thermostat) ---
-        this.errorResetService = accessory.getService('Error Reset')
-            ?? accessory.addService(Service.Switch, 'Error Reset', 'error-reset');
-        this.errorResetService.getCharacteristic(Characteristic.On)
-            .onGet(() => false)
-            .onSet((value) => this.handleErrorReset(value));
-        this.thermostatService.addLinkedService(this.errorResetService);
+        // Remove legacy Error Reset switch if it exists from previous version
+        const legacySwitch = accessory.getService('Error Reset');
+        if (legacySwitch) {
+            accessory.removeService(legacySwitch);
+        }
     }
     updateState(state) {
         const { Characteristic } = this.platform;
@@ -69,6 +69,14 @@ export class StoveAccessory {
         this.thermostatService.updateCharacteristic(Characteristic.StatusFault, this.isInFaultState(state.stato)
             ? Characteristic.StatusFault.GENERAL_FAULT
             : Characteristic.StatusFault.NO_FAULT);
+        // Update name to show error info or restore default
+        if (this.isInFaultState(state.stato) && state.errore > 0) {
+            const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown';
+            this.thermostatService.updateCharacteristic(Characteristic.Name, `Error ${state.errore}: ${errorDesc}`);
+        }
+        else {
+            this.thermostatService.updateCharacteristic(Characteristic.Name, this.defaultName);
+        }
         const setpointParam = state.parameters.get(PARAM_TEMP_SETPOINT);
         if (setpointParam) {
             this.thermostatService.updateCharacteristic(Characteristic.TargetTemperature, setpointParam.value);
@@ -79,6 +87,31 @@ export class StoveAccessory {
                 ? Characteristic.TargetHeatingCoolingState.HEAT
                 : Characteristic.TargetHeatingCoolingState.OFF);
         }
+        // Room temperature sensor (created dynamically on first data)
+        const roomSensor = state.sensors.get(SENSOR_ROOM_TEMP);
+        if (roomSensor) {
+            if (!this.roomTempService) {
+                this.createRoomTempService();
+            }
+            const roomTemp = applyPosPunto(roomSensor.valore, state.posPunto);
+            this.roomTempService.updateCharacteristic(Characteristic.CurrentTemperature, roomTemp);
+        }
+    }
+    createRoomTempService() {
+        const { Service, Characteristic } = this.platform;
+        this.roomTempService = this.accessory.getService('Room Temperature')
+            ?? this.accessory.addService(Service.TemperatureSensor, 'Room Temperature', 'room-temp');
+        this.roomTempService.getCharacteristic(Characteristic.CurrentTemperature)
+            .setProps({ minValue: -40, maxValue: 100, minStep: 0.1 })
+            .onGet(() => {
+            const sensor = this.platform.deviceState?.sensors.get(SENSOR_ROOM_TEMP);
+            if (sensor && this.platform.deviceState) {
+                return applyPosPunto(sensor.valore, this.platform.deviceState.posPunto);
+            }
+            return 0;
+        });
+        this.thermostatService.addLinkedService(this.roomTempService);
+        this.platform.log.info('Room temperature sensor detected, service created');
     }
     mapCurrentState(stato) {
         const { Characteristic } = this.platform;
@@ -131,15 +164,6 @@ export class StoveAccessory {
         return this.isInFaultState(stato)
             ? Characteristic.StatusFault.GENERAL_FAULT
             : Characteristic.StatusFault.NO_FAULT;
-    }
-    async handleErrorReset(value) {
-        if (value) {
-            this.platform.log.info('Resetting stove error');
-            await this.platform.resetError();
-            setTimeout(() => {
-                this.errorResetService.updateCharacteristic(this.platform.Characteristic.On, false);
-            }, 1000);
-        }
     }
 }
 //# sourceMappingURL=stoveAccessory.js.map

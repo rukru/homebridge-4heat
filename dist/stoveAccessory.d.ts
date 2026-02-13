@@ -6,9 +6,11 @@ export declare class StoveAccessory {
     private readonly accessory;
     private static readonly HEATING_STATES;
     private readonly thermostatService;
-    private readonly errorResetService;
+    private readonly defaultName;
+    private roomTempService;
     constructor(platform: FourHeatPlatform, accessory: PlatformAccessory);
     updateState(state: DeviceState): void;
+    private createRoomTempService;
     private mapCurrentState;
     private isInFaultState;
     private getCurrentHeatingState;
@@ -18,5 +20,4 @@ export declare class StoveAccessory {
     private getTargetTemperature;
     private setTargetTemperature;
     private getStatusFault;
-    private handleErrorReset;
 }

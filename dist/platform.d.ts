@@ -19,6 +19,8 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private originalPeriodo;
     private pollCount;
     private static readonly CCG_POLL_INTERVAL;
+    private timezoneTimer;
+    private lastSyncedOffset;
     constructor(log: Logging, config: FourHeatConfig, api: API);
     configureAccessory(accessory: PlatformAccessory): void;
     private didFinishLaunching;
@@ -33,6 +35,8 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private refreshSchedule;
     enableCrono(): Promise<boolean>;
     disableCrono(): Promise<boolean>;
+    private startTimezoneSync;
+    private syncTimezone;
     get schedule(): CronoSchedule | null;
     get minTemp(): number;
     get maxTemp(): number;

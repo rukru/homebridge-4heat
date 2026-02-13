@@ -208,4 +208,11 @@ export function buildCCSDisableCommand(schedule) {
 export function buildCCSEnableCommand(schedule) {
     return buildCCSFromSchedule(schedule);
 }
+// --- Timezone sync (COR) ---
+export function buildCORCommand(latitude, longitude) {
+    const offset = -(new Date().getTimezoneOffset());
+    const lat = latitude?.toFixed(4) ?? '0';
+    const lon = longitude?.toFixed(4) ?? '0';
+    return `["COR","3","${offset}","${lat}","${lon}"]`;
+}
 //# sourceMappingURL=protocol.js.map

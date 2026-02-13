@@ -5,7 +5,7 @@
  */
 import net from 'node:net';
 import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
-import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto, buildCCGCommand, parseCCGResponse } from './protocol.js';
+import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto, buildCCGCommand, parseCCGResponse, buildCORCommand } from './protocol.js';
 import { wakeAndDiscover } from './udp.js';
 export class FourHeatClient {
     log;
@@ -199,6 +199,11 @@ export class FourHeatClient {
     }
     async writeSchedule(command) {
         const resp = await this.enqueue(command);
+        return resp !== null;
+    }
+    async syncTimezone(latitude, longitude) {
+        const cmd = buildCORCommand(latitude, longitude);
+        const resp = await this.enqueue(cmd);
         return resp !== null;
     }
 }

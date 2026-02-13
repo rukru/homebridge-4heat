@@ -16,6 +16,7 @@ import {
   buildCCSFromSchedule,
   buildCCSDisableCommand,
   buildCCSEnableCommand,
+  buildCORCommand,
 } from '../src/protocol.js';
 import type { CronoSchedule } from '../src/types.js';
 
@@ -473,5 +474,31 @@ describe('crono CCG/CCS protocol', () => {
       const expected = raw.replace('"CCG"', '"CCS"');
       assert.equal(rebuilt, expected);
     });
+  });
+});
+
+describe('buildCORCommand', () => {
+  it('returns COR command with coordinates', () => {
+    const cmd = buildCORCommand(45.4642, 9.19);
+    assert.ok(cmd.startsWith('["COR","3","'));
+    assert.ok(cmd.includes('"45.4642"'));
+    assert.ok(cmd.includes('"9.1900"'));
+    assert.ok(cmd.endsWith('"]'));
+  });
+
+  it('uses "0" when no coordinates provided', () => {
+    const cmd = buildCORCommand();
+    assert.ok(cmd.includes('"0"'));
+    const parts = cmd.slice(1, -1).split('","');
+    assert.equal(parts[3], '0');
+    assert.equal(parts[4].replace(/"$/, ''), '0');
+  });
+
+  it('includes timezone offset as number', () => {
+    const cmd = buildCORCommand();
+    const parts = cmd.slice(1, -1).split('","');
+    const offset = parseInt(parts[2], 10);
+    assert.ok(!isNaN(offset));
+    assert.ok(offset >= -720 && offset <= 840);
   });
 });

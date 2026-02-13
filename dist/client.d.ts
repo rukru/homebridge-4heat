@@ -35,4 +35,5 @@ export declare class FourHeatClient {
     resetError(): Promise<boolean>;
     readSchedule(): Promise<CronoSchedule | null>;
     writeSchedule(command: string): Promise<boolean>;
+    syncTimezone(latitude?: number, longitude?: number): Promise<boolean>;
 }

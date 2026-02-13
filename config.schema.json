@@ -76,6 +76,24 @@
         "description": "Display name for the crono switch in Apple Home",
         "condition": { "functionBody": "return model.cronoSwitch === true;" }
       },
+      "timezoneSync": {
+        "title": "Timezone Sync",
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically sync timezone to the device on startup and every hour. Required for correct schedule timing and DST transitions."
+      },
+      "latitude": {
+        "title": "Latitude",
+        "type": "number",
+        "description": "Device location latitude (e.g. 45.4642). Used by the device for sunrise/sunset calculations.",
+        "condition": { "functionBody": "return model.timezoneSync === true;" }
+      },
+      "longitude": {
+        "title": "Longitude",
+        "type": "number",
+        "description": "Device location longitude (e.g. 9.1900). Used by the device for sunrise/sunset calculations.",
+        "condition": { "functionBody": "return model.timezoneSync === true;" }
+      },
       "sensors": {
         "title": "Sensors",
         "type": "object",
@@ -149,7 +167,7 @@
     {
       "type": "fieldset",
       "title": "Connection",
-      "items": ["name", "host", "port", "pollingInterval", "logLevel"]
+      "items": ["name", "host", "port", "pollingInterval", "logLevel", "timezoneSync", "latitude", "longitude"]
     },
     {
       "type": "fieldset",

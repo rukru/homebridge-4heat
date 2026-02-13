@@ -38,6 +38,8 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   private originalPeriodo: number | null = null;
   private pollCount = 0;
   private static readonly CCG_POLL_INTERVAL = 10;
+  private timezoneTimer: ReturnType<typeof setInterval> | null = null;
+  private lastSyncedOffset: number | null = null;
 
   constructor(
     public readonly log: Logging,
@@ -96,6 +98,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     }
 
     this.startPolling();
+
+    if (this.config.timezoneSync !== false) {
+      this.startTimezoneSync();
+    }
   }
 
   private registerAccessory(identifier: string) {
@@ -303,6 +309,34 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
       await this.poll();
     }
     return success;
+  }
+
+  private startTimezoneSync() {
+    // Sync immediately after first successful poll (2s delay to let poll finish)
+    setTimeout(() => this.syncTimezone(), 2000);
+    // Re-check every hour — catches DST transitions
+    this.timezoneTimer = setInterval(() => this.syncTimezone(), 3600_000);
+  }
+
+  private async syncTimezone() {
+    const currentOffset = -(new Date().getTimezoneOffset());
+    if (this.lastSyncedOffset === currentOffset) {
+      return;
+    }
+    try {
+      const success = await this.client.syncTimezone(this.config.latitude, this.config.longitude);
+      if (success) {
+        this.lastSyncedOffset = currentOffset;
+        this.log.info('Timezone synced to device: UTC%s%d min (lat=%s, lon=%s)',
+          currentOffset >= 0 ? '+' : '', currentOffset,
+          this.config.latitude ?? 0, this.config.longitude ?? 0,
+        );
+      } else {
+        this.log.warn('Timezone sync failed');
+      }
+    } catch (err) {
+      this.log.warn('Timezone sync error: %s', err);
+    }
   }
 
   get schedule(): CronoSchedule | null {

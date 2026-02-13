@@ -252,3 +252,12 @@ export function buildCCSDisableCommand(schedule: CronoSchedule): string {
 export function buildCCSEnableCommand(schedule: CronoSchedule): string {
   return buildCCSFromSchedule(schedule);
 }
+
+// --- Timezone sync (COR) ---
+
+export function buildCORCommand(latitude?: number, longitude?: number): string {
+  const offset = -(new Date().getTimezoneOffset());
+  const lat = latitude?.toFixed(4) ?? '0';
+  const lon = longitude?.toFixed(4) ?? '0';
+  return `["COR","3","${offset}","${lat}","${lon}"]`;
+}

@@ -24,6 +24,9 @@ export interface FourHeatConfig extends PlatformConfig {
   logLevel?: 'normal' | 'verbose' | 'debug';
   cronoSwitch?: boolean;
   cronoName?: string;
+  timezoneSync?: boolean;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface DiscoveredDevice {

@@ -85,3 +85,4 @@ export declare function parseCCGResponse(raw: string): CronoSchedule | null;
 export declare function buildCCSFromSchedule(schedule: CronoSchedule, newPeriodo?: number): string;
 export declare function buildCCSDisableCommand(schedule: CronoSchedule): string;
 export declare function buildCCSEnableCommand(schedule: CronoSchedule): string;
+export declare function buildCORCommand(latitude?: number, longitude?: number): string;

@@ -118,14 +118,29 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
         if (state.errore > 0) {
           const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown error';
           this.log.warn('Stove error %d: %s (state=%s)', state.errore, errorDesc, STATO_LABELS[state.stato] ?? state.stato);
-        } else {
-          this.log.debug('Poll OK: stato=%s, temp=%.1f°C', STATO_LABELS[state.stato] ?? state.stato, state.tempPrinc);
         }
+
+        const params: string[] = [];
+        for (const [id, p] of state.parameters) {
+          params.push(`0x${id.toString(16)}=${p.value}`);
+        }
+        const sensors: string[] = [];
+        for (const [id, s] of state.sensors) {
+          sensors.push(`0x${id.toString(16)}=${s.valore}`);
+        }
+        this.log.info(
+          'Poll: state=%s temp=%.1f°C err=%d params=[%s] sensors=[%s]',
+          STATO_LABELS[state.stato] ?? state.stato,
+          state.tempPrinc,
+          state.errore,
+          params.join(', '),
+          sensors.join(', '),
+        );
       } else {
         this.handlePollFailure();
       }
     } catch (err) {
-      this.log.debug('Poll exception: %s', err);
+      this.log.warn('Poll exception: %s', err);
       this.handlePollFailure();
     }
   }

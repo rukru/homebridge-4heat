@@ -7,7 +7,7 @@ import type {
   Characteristic,
 } from 'homebridge';
 import type { FourHeatConfig, DeviceState } from './types.js';
-import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO_LABELS } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO_LABELS, ERROR_CODES } from './types.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -116,7 +116,8 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
         this.stoveAccessory?.updateState(state);
 
         if (state.errore > 0) {
-          this.log.warn('Stove error: code=%d, state=%s', state.errore, STATO_LABELS[state.stato] ?? state.stato);
+          const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown error';
+          this.log.warn('Stove error %d: %s (state=%s)', state.errore, errorDesc, STATO_LABELS[state.stato] ?? state.stato);
         } else {
           this.log.debug('Poll OK: stato=%s, temp=%.1f°C', STATO_LABELS[state.stato] ?? state.stato, state.tempPrinc);
         }
@@ -149,6 +150,22 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     const success = await this.client.writeParameter(param.originalHex, value);
     if (success) {
       // Refresh state after write
+      await this.poll();
+    }
+    return success;
+  }
+
+  async turnOn(): Promise<boolean> {
+    const success = await this.client.turnOn();
+    if (success) {
+      await this.poll();
+    }
+    return success;
+  }
+
+  async turnOff(): Promise<boolean> {
+    const success = await this.client.turnOff();
+    if (success) {
       await this.poll();
     }
     return success;

@@ -158,6 +158,20 @@ export function build2WCCommand(originalHex: string, newValue: number): string {
   return `["2WC","1","${binaryStr}"]`;
 }
 
+export function buildDirectCommand(hexPayload: string): string {
+  const buf = Buffer.from(hexPayload, 'hex');
+  const binaryStr = Array.from(buf).map(b => String.fromCharCode(b)).join('');
+  return `["2WC","1","${binaryStr}"]`;
+}
+
+export function buildOnCommand(): string {
+  return buildDirectCommand('05040000');
+}
+
+export function buildOffCommand(): string {
+  return buildDirectCommand('05050000');
+}
+
 export function buildResetCommand(): string {
   return '["RST","0"]';
 }

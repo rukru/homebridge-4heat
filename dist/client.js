@@ -58,14 +58,16 @@ export class FourHeatClient {
         });
     }
     async wakeAndResolveHost() {
+        if (this.host) {
+            return this.host;
+        }
         const device = await wakeAndDiscover();
         if (device) {
-            if (!this.host) {
-                this.host = device.ip;
-            }
-            return this.host ?? device.ip;
+            this.host = device.ip;
+            this.log.info('Discovered device at %s', device.ip);
+            return device.ip;
         }
-        return this.host ?? null;
+        return null;
     }
     async executeCommand(cmd) {
         const host = await this.wakeAndResolveHost();

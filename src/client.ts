@@ -68,14 +68,16 @@ export class FourHeatClient {
   }
 
   private async wakeAndResolveHost(): Promise<string | null> {
+    if (this.host) {
+      return this.host;
+    }
     const device = await wakeAndDiscover();
     if (device) {
-      if (!this.host) {
-        this.host = device.ip;
-      }
-      return this.host ?? device.ip;
+      this.host = device.ip;
+      this.log.info('Discovered device at %s', device.ip);
+      return device.ip;
     }
-    return this.host ?? null;
+    return null;
   }
 
   private async executeCommand(cmd: string): Promise<string | null> {

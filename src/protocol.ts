@@ -153,15 +153,11 @@ export function build2WCCommand(originalHex: string, newValue: number): string {
     ? (newValue + 65536).toString(16).padStart(4, '0')
     : newValue.toString(16).padStart(4, '0');
   const cmdHex = '05' + originalHex.slice(0, 6) + valHex;
-  const buf = Buffer.from(cmdHex, 'hex');
-  const binaryStr = Array.from(buf).map(b => String.fromCharCode(b)).join('');
-  return `["2WC","1","${binaryStr}"]`;
+  return `["2WC","1","${cmdHex}"]`;
 }
 
 export function buildDirectCommand(hexPayload: string): string {
-  const buf = Buffer.from(hexPayload, 'hex');
-  const binaryStr = Array.from(buf).map(b => String.fromCharCode(b)).join('');
-  return `["2WC","1","${binaryStr}"]`;
+  return `["2WC","1","${hexPayload}"]`;
 }
 
 export function buildOnCommand(): string {

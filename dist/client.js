@@ -73,7 +73,10 @@ export class FourHeatClient {
             this.log.warn('No device found via UDP discovery and no host configured');
             return null;
         }
-        return this.sendTcp(cmd, host);
+        this.log.debug('TCP send → %s:%d: %s', host, this.port, cmd);
+        const resp = await this.sendTcp(cmd, host);
+        this.log.debug('TCP recv ← %s', resp ?? '(null)');
+        return resp;
     }
     enqueue(cmd) {
         return new Promise((resolve) => {

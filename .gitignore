@@ -1,7 +1,5 @@
 node_modules/
 node_modules.nosync/
-dist/
-dist.nosync/
 dist-test/
 dist-test.nosync/
 .DS_Store

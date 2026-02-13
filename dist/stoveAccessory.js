@@ -1,4 +1,4 @@
-import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
 import { applyPosPunto } from './protocol.js';
 export class StoveAccessory {
     platform;
@@ -12,9 +12,12 @@ export class StoveAccessory {
         STATO.MODULATION,
         STATO.RECOVER_IGNITION,
     ]);
+    static TARGET_OVERRIDE_TTL = 60_000; // 60s
     thermostatService;
     defaultName;
     roomTempService = null;
+    targetOverride = null;
+    targetOverrideExpiry = 0;
     constructor(platform, accessory) {
         this.platform = platform;
         this.accessory = accessory;
@@ -81,12 +84,15 @@ export class StoveAccessory {
         if (setpointParam) {
             this.thermostatService.updateCharacteristic(Characteristic.TargetTemperature, setpointParam.value);
         }
-        const onOffParam = state.parameters.get(PARAM_ON_OFF);
-        if (onOffParam) {
-            this.thermostatService.updateCharacteristic(Characteristic.TargetHeatingCoolingState, onOffParam.value === 1
-                ? Characteristic.TargetHeatingCoolingState.HEAT
-                : Characteristic.TargetHeatingCoolingState.OFF);
+        const derivedTarget = this.isActiveState(state.stato)
+            ? Characteristic.TargetHeatingCoolingState.HEAT
+            : Characteristic.TargetHeatingCoolingState.OFF;
+        if (this.targetOverride !== null) {
+            if (derivedTarget === this.targetOverride || Date.now() > this.targetOverrideExpiry) {
+                this.targetOverride = null;
+            }
         }
+        this.thermostatService.updateCharacteristic(Characteristic.TargetHeatingCoolingState, this.targetOverride ?? derivedTarget);
         // Room temperature sensor (created dynamically on first data)
         const roomSensor = state.sensors.get(SENSOR_ROOM_TEMP);
         if (roomSensor) {
@@ -120,6 +126,9 @@ export class StoveAccessory {
         }
         return Characteristic.CurrentHeatingCoolingState.OFF;
     }
+    isActiveState(stato) {
+        return stato !== STATO.OFF && stato !== STATO.EXTINGUISHING;
+    }
     isInFaultState(stato) {
         return stato === STATO.BLOCK || stato === STATO.SAFETY_MODE;
     }
@@ -129,15 +138,20 @@ export class StoveAccessory {
     }
     getTargetHeatingState() {
         const { Characteristic } = this.platform;
-        const param = this.platform.deviceState?.parameters.get(PARAM_ON_OFF);
-        if (param && param.value === 1) {
-            return Characteristic.TargetHeatingCoolingState.HEAT;
+        if (this.targetOverride !== null && Date.now() <= this.targetOverrideExpiry) {
+            return this.targetOverride;
         }
-        return Characteristic.TargetHeatingCoolingState.OFF;
+        const stato = this.platform.deviceState?.stato ?? 0;
+        return this.isActiveState(stato)
+            ? Characteristic.TargetHeatingCoolingState.HEAT
+            : Characteristic.TargetHeatingCoolingState.OFF;
     }
     async setTargetHeatingState(value) {
         const { Characteristic } = this.platform;
-        if (value === Characteristic.TargetHeatingCoolingState.HEAT) {
+        const target = value;
+        this.targetOverride = target;
+        this.targetOverrideExpiry = Date.now() + StoveAccessory.TARGET_OVERRIDE_TTL;
+        if (target === Characteristic.TargetHeatingCoolingState.HEAT) {
             this.platform.log.info('Turning stove ON');
             await this.platform.turnOn();
         }

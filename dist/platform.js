@@ -1,8 +1,11 @@
+import { createRequire } from 'node:module';
 import { STATO, STATO_LABELS, ERROR_CODES } from './types.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
 import { StoveAccessory } from './stoveAccessory.js';
+const require = createRequire(import.meta.url);
+const { version: PLUGIN_VERSION } = require('../package.json');
 const BACKOFF_STEPS = [5, 10, 30, 60];
 export class FourHeatPlatform {
     log;
@@ -33,6 +36,7 @@ export class FourHeatPlatform {
         this.cachedAccessories.set(accessory.UUID, accessory);
     }
     async didFinishLaunching() {
+        this.log.info('Starting homebridge-4heat v%s', PLUGIN_VERSION);
         const host = this.config.host;
         const port = this.config.port ?? DEFAULT_PORT;
         if (!host) {
@@ -103,7 +107,8 @@ export class FourHeatPlatform {
                 for (const [id, s] of state.sensors) {
                     sensors.push(`0x${id.toString(16)}=${s.valore}`);
                 }
-                this.log.info('Poll: state=%s temp=%.1f°C err=%d params=[%s] sensors=[%s]', STATO_LABELS[state.stato] ?? state.stato, state.tempPrinc, state.errore, params.join(', '), sensors.join(', '));
+                const tempStr = state.tempPrinc.toFixed(1);
+                this.log.info('Poll: state=%s temp=%s°C err=%d params=[%s] sensors=[%s]', STATO_LABELS[state.stato] ?? String(state.stato), tempStr, state.errore, params.join(', '), sensors.join(', '));
             }
             else {
                 this.handlePollFailure();

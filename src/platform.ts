@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import type {
   API,
   DynamicPlatformPlugin,
@@ -12,6 +13,9 @@ import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEF
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
 import { StoveAccessory } from './stoveAccessory.js';
+
+const require = createRequire(import.meta.url);
+const { version: PLUGIN_VERSION } = require('../package.json') as { version: string };
 
 const BACKOFF_STEPS = [5, 10, 30, 60];
 
@@ -51,6 +55,7 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   }
 
   private async didFinishLaunching() {
+    this.log.info('Starting homebridge-4heat v%s', PLUGIN_VERSION);
     const host = this.config.host;
     const port = this.config.port ?? DEFAULT_PORT;
 

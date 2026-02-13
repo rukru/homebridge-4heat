@@ -128,10 +128,11 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
         for (const [id, s] of state.sensors) {
           sensors.push(`0x${id.toString(16)}=${s.valore}`);
         }
+        const tempStr = state.tempPrinc.toFixed(1);
         this.log.info(
-          'Poll: state=%s temp=%.1f°C err=%d params=[%s] sensors=[%s]',
-          STATO_LABELS[state.stato] ?? state.stato,
-          state.tempPrinc,
+          'Poll: state=%s temp=%s°C err=%d params=[%s] sensors=[%s]',
+          STATO_LABELS[state.stato] ?? String(state.stato),
+          tempStr,
           state.errore,
           params.join(', '),
           sensors.join(', '),

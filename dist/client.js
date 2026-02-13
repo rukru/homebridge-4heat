@@ -11,19 +11,29 @@ export class FourHeatClient {
     log;
     host;
     port;
-    timeout;
-    connectDelay;
     busy = false;
     queue = [];
-    constructor(log, host, port, timeout = DEFAULT_TIMEOUT, connectDelay = DEFAULT_CONNECT_DELAY) {
+    timeout;
+    connectDelay;
+    debugTcp;
+    constructor(log, host, port, options) {
         this.log = log;
         this.host = host;
         this.port = port;
-        this.timeout = timeout;
-        this.connectDelay = connectDelay;
+        this.timeout = options?.timeout ?? DEFAULT_TIMEOUT;
+        this.connectDelay = options?.connectDelay ?? DEFAULT_CONNECT_DELAY;
+        this.debugTcp = options?.debugTcp ?? false;
     }
     get currentHost() {
         return this.host;
+    }
+    tcpLog(message, ...args) {
+        if (this.debugTcp) {
+            this.log.info(message, ...args);
+        }
+        else {
+            this.log.debug(message, ...args);
+        }
     }
     sendTcp(cmd, host) {
         return new Promise((resolve) => {
@@ -45,7 +55,7 @@ export class FourHeatClient {
             socket.on('close', () => finish(data || null));
             socket.on('timeout', () => finish(null));
             socket.on('error', (err) => {
-                this.log.debug('TCP error: %s', err.message);
+                this.tcpLog('TCP error: %s', err.message);
                 finish(null);
             });
             socket.connect(this.port, host, () => {
@@ -75,9 +85,9 @@ export class FourHeatClient {
             this.log.warn('No device found via UDP discovery and no host configured');
             return null;
         }
-        this.log.debug('TCP send → %s:%d: %s', host, this.port, cmd);
+        this.tcpLog('TCP send → %s:%d: %s', host, this.port, cmd);
         const resp = await this.sendTcp(cmd, host);
-        this.log.debug('TCP recv ← %s', resp ?? '(null)');
+        this.tcpLog('TCP recv ← %s', resp ?? '(null)');
         return resp;
     }
     enqueue(cmd) {

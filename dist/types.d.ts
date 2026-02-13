@@ -19,6 +19,7 @@ export interface FourHeatConfig extends PlatformConfig {
     maxTemp?: number;
     sensors?: SensorsConfig;
     switchDebounce?: number;
+    logLevel?: 'normal' | 'verbose' | 'debug';
 }
 export interface DiscoveredDevice {
     id: string;

@@ -26,6 +26,7 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
 
   public client!: FourHeatClient;
   public deviceState: DeviceState | null = null;
+  private readonly logLevel: 'normal' | 'verbose' | 'debug';
 
   private readonly cachedAccessories: Map<string, PlatformAccessory> = new Map();
   private stoveAccessory: StoveAccessory | null = null;
@@ -39,6 +40,8 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     public readonly api: API,
   ) {
     this.config = config;
+    const validLevels = new Set(['normal', 'verbose', 'debug']);
+    this.logLevel = validLevels.has(config.logLevel ?? '') ? config.logLevel! as 'normal' | 'verbose' | 'debug' : 'normal';
     this.Service = api.hap.Service;
     this.Characteristic = api.hap.Characteristic;
 
@@ -71,7 +74,7 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
       const device = await wakeAndDiscover();
       if (device) {
         this.log.info('Discovered 4HEAT device: %s (%s) at %s', device.name, device.id, device.ip);
-        this.client = new FourHeatClient(this.log, device.ip, port);
+        this.client = new FourHeatClient(this.log, device.ip, port, { debugTcp: this.logLevel === 'debug' });
         this.registerAccessory(device.id);
       } else {
         this.log.error('No 4HEAT device found on the network. Configure "host" manually.');
@@ -79,7 +82,7 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
       }
     } else {
       this.log.info('Using configured host: %s:%d', host, port);
-      this.client = new FourHeatClient(this.log, host, port);
+      this.client = new FourHeatClient(this.log, host, port, { debugTcp: this.logLevel === 'debug' });
       this.registerAccessory(host);
     }
 
@@ -132,23 +135,25 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
           this.log.warn('Stove error %d: %s (state=%s)', state.errore, errorDesc, STATO_LABELS[state.stato] ?? state.stato);
         }
 
-        const params: string[] = [];
-        for (const [id, p] of state.parameters) {
-          params.push(`0x${id.toString(16)}=${p.value}`);
+        if (this.logLevel !== 'normal') {
+          const params: string[] = [];
+          for (const [id, p] of state.parameters) {
+            params.push(`0x${id.toString(16)}=${p.value}`);
+          }
+          const sensors: string[] = [];
+          for (const [id, s] of state.sensors) {
+            sensors.push(`0x${id.toString(16)}=${s.valore}`);
+          }
+          const tempStr = state.tempPrinc.toFixed(1);
+          this.log.info(
+            'Poll: state=%s temp=%s°C err=%d params=[%s] sensors=[%s]',
+            STATO_LABELS[state.stato] ?? String(state.stato),
+            tempStr,
+            state.errore,
+            params.join(', '),
+            sensors.join(', '),
+          );
         }
-        const sensors: string[] = [];
-        for (const [id, s] of state.sensors) {
-          sensors.push(`0x${id.toString(16)}=${s.valore}`);
-        }
-        const tempStr = state.tempPrinc.toFixed(1);
-        this.log.info(
-          'Poll: state=%s temp=%s°C err=%d params=[%s] sensors=[%s]',
-          STATO_LABELS[state.stato] ?? String(state.stato),
-          tempStr,
-          state.errore,
-          params.join(', '),
-          sensors.join(', '),
-        );
       } else {
         this.handlePollFailure();
       }

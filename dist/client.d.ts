@@ -5,16 +5,23 @@
  */
 import type { Logging } from 'homebridge';
 import type { DeviceState } from './types.js';
+export interface FourHeatClientOptions {
+    timeout?: number;
+    connectDelay?: number;
+    debugTcp?: boolean;
+}
 export declare class FourHeatClient {
     private readonly log;
     private host;
     private readonly port;
-    private readonly timeout;
-    private readonly connectDelay;
     private busy;
     private queue;
-    constructor(log: Logging, host: string | undefined, port: number, timeout?: number, connectDelay?: number);
+    private readonly timeout;
+    private readonly connectDelay;
+    private readonly debugTcp;
+    constructor(log: Logging, host: string | undefined, port: number, options?: FourHeatClientOptions);
     get currentHost(): string | undefined;
+    private tcpLog;
     private sendTcp;
     private wakeAndResolveHost;
     private executeCommand;

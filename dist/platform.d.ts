@@ -9,6 +9,7 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     readonly config: FourHeatConfig;
     client: FourHeatClient;
     deviceState: DeviceState | null;
+    private readonly logLevel;
     private readonly cachedAccessories;
     private stoveAccessory;
     private pollingTimer;

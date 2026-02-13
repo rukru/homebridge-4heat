@@ -11,6 +11,12 @@ import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
 import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto } from './protocol.js';
 import { wakeAndDiscover } from './udp.js';
 
+export interface FourHeatClientOptions {
+  timeout?: number;
+  connectDelay?: number;
+  debugTcp?: boolean;
+}
+
 export class FourHeatClient {
   private busy = false;
   private queue: Array<{
@@ -18,16 +24,31 @@ export class FourHeatClient {
     resolve: (value: string | null) => void;
   }> = [];
 
+  private readonly timeout: number;
+  private readonly connectDelay: number;
+  private readonly debugTcp: boolean;
+
   constructor(
     private readonly log: Logging,
     private host: string | undefined,
     private readonly port: number,
-    private readonly timeout: number = DEFAULT_TIMEOUT,
-    private readonly connectDelay: number = DEFAULT_CONNECT_DELAY,
-  ) {}
+    options?: FourHeatClientOptions,
+  ) {
+    this.timeout = options?.timeout ?? DEFAULT_TIMEOUT;
+    this.connectDelay = options?.connectDelay ?? DEFAULT_CONNECT_DELAY;
+    this.debugTcp = options?.debugTcp ?? false;
+  }
 
   get currentHost(): string | undefined {
     return this.host;
+  }
+
+  private tcpLog(message: string, ...args: unknown[]) {
+    if (this.debugTcp) {
+      this.log.info(message, ...args);
+    } else {
+      this.log.debug(message, ...args);
+    }
   }
 
   private sendTcp(cmd: string, host: string): Promise<string | null> {
@@ -53,7 +74,7 @@ export class FourHeatClient {
       socket.on('close', () => finish(data || null));
       socket.on('timeout', () => finish(null));
       socket.on('error', (err) => {
-        this.log.debug('TCP error: %s', err.message);
+        this.tcpLog('TCP error: %s', err.message);
         finish(null);
       });
 
@@ -86,9 +107,9 @@ export class FourHeatClient {
       this.log.warn('No device found via UDP discovery and no host configured');
       return null;
     }
-    this.log.debug('TCP send → %s:%d: %s', host, this.port, cmd);
+    this.tcpLog('TCP send → %s:%d: %s', host, this.port, cmd);
     const resp = await this.sendTcp(cmd, host);
-    this.log.debug('TCP recv ← %s', resp ?? '(null)');
+    this.tcpLog('TCP recv ← %s', resp ?? '(null)');
     return resp;
   }
 

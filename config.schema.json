@@ -44,6 +44,17 @@
         "minimum": 0,
         "maximum": 100
       },
+      "logLevel": {
+        "title": "Log Level",
+        "type": "string",
+        "default": "normal",
+        "oneOf": [
+          { "title": "Normal — events & errors only", "enum": ["normal"] },
+          { "title": "Verbose — every poll cycle", "enum": ["verbose"] },
+          { "title": "Debug — verbose + TCP traffic", "enum": ["debug"] }
+        ],
+        "description": "Controls how much information is written to the Homebridge log"
+      },
       "switchDebounce": {
         "title": "On/Off Debounce (seconds)",
         "type": "integer",
@@ -125,7 +136,7 @@
     {
       "type": "fieldset",
       "title": "Connection",
-      "items": ["name", "host", "port", "pollingInterval"]
+      "items": ["name", "host", "port", "pollingInterval", "logLevel"]
     },
     {
       "type": "fieldset",

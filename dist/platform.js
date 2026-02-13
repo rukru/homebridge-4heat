@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS, CRONO_PERIODO_LABELS } from './types.js';
-import { buildCCSDisableCommand, buildCCSEnableCommand } from './protocol.js';
+import { buildCCSDisableCommand, buildCCSFromSchedule } from './protocol.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -23,6 +23,7 @@ export class FourHeatPlatform {
     consecutiveFailures = 0;
     backoffTimer = null;
     cachedSchedule = null;
+    originalPeriodo = null;
     pollCount = 0;
     static CCG_POLL_INTERVAL = 10;
     constructor(log, config, api) {
@@ -201,9 +202,12 @@ export class FourHeatPlatform {
         try {
             const schedule = await this.client.readSchedule();
             if (schedule) {
+                if (schedule.periodo !== 0) {
+                    this.originalPeriodo = schedule.periodo;
+                }
                 this.cachedSchedule = schedule;
                 if (this.logLevel !== 'normal') {
-                    this.log.info('Schedule refreshed: periodo=%s', CRONO_PERIODO_LABELS[schedule.periodo] ?? String(schedule.periodo));
+                    this.log.info('Schedule refreshed: periodo=%s (saved=%s)', CRONO_PERIODO_LABELS[schedule.periodo] ?? String(schedule.periodo), this.originalPeriodo !== null ? (CRONO_PERIODO_LABELS[this.originalPeriodo] ?? String(this.originalPeriodo)) : 'none');
                 }
             }
         }
@@ -215,12 +219,19 @@ export class FourHeatPlatform {
         if (!this.cachedSchedule) {
             await this.refreshSchedule();
         }
-        if (!this.cachedSchedule || this.cachedSchedule.periodo === 0) {
+        if (!this.cachedSchedule) {
+            this.log.warn('Cannot enable crono: no schedule data available');
+            return false;
+        }
+        const periodo = this.cachedSchedule.periodo !== 0
+            ? this.cachedSchedule.periodo
+            : this.originalPeriodo;
+        if (!periodo) {
             this.log.warn('Cannot enable crono: no schedule configured. Use the 4HEAT app to set up a schedule first.');
             return false;
         }
-        this.log.info('Enabling crono (periodo=%s)', CRONO_PERIODO_LABELS[this.cachedSchedule.periodo] ?? String(this.cachedSchedule.periodo));
-        const cmd = buildCCSEnableCommand(this.cachedSchedule);
+        this.log.info('Enabling crono (periodo=%s)', CRONO_PERIODO_LABELS[periodo] ?? String(periodo));
+        const cmd = buildCCSFromSchedule(this.cachedSchedule, periodo);
         const success = await this.client.writeSchedule(cmd);
         if (success) {
             await this.refreshSchedule();

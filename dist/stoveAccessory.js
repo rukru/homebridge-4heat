@@ -18,6 +18,7 @@ export class StoveAccessory {
     defaultName;
     sensorServices = new Map();
     cronoSwitchService = null;
+    cronoDefaultName = 'Schedule';
     targetOverride = null;
     targetOverrideExpiry = 0;
     switchDebounceTimer = null;
@@ -311,16 +312,19 @@ export class StoveAccessory {
     // --- Crono (schedule) switch ---
     setupCronoSwitch() {
         const { Service, Characteristic } = this.platform;
+        const cronoName = this.platform.config.cronoName || 'Schedule';
         let service = this.accessory.getServiceById(Service.Switch, 'crono-switch');
         if (!service) {
-            service = this.accessory.addService(Service.Switch, 'Schedule', 'crono-switch');
+            service = this.accessory.addService(Service.Switch, cronoName, 'crono-switch');
         }
+        service.setCharacteristic(Characteristic.Name, cronoName);
         service.getCharacteristic(Characteristic.On)
             .onGet(() => this.getCronoOn())
             .onSet((value) => this.setCronoOn(value));
         this.thermostatService.addLinkedService(service);
         this.cronoSwitchService = service;
-        this.platform.log.info('Crono switch service created');
+        this.cronoDefaultName = cronoName;
+        this.platform.log.info('Crono switch service created: %s', cronoName);
     }
     getCronoOn() {
         const statoCrono = this.platform.deviceState?.statoCrono ?? STATO_CRONO.OFF;
@@ -352,14 +356,14 @@ export class StoveAccessory {
         if (cronoOn && schedule && schedule.periodo !== 0) {
             const nextEvent = this.calculateNextEvent(schedule);
             if (nextEvent) {
-                this.cronoSwitchService.updateCharacteristic(Characteristic.Name, `Crono: ${nextEvent}`);
+                this.cronoSwitchService.updateCharacteristic(Characteristic.Name, `${this.cronoDefaultName}: ${nextEvent}`);
             }
             else {
-                this.cronoSwitchService.updateCharacteristic(Characteristic.Name, 'Schedule');
+                this.cronoSwitchService.updateCharacteristic(Characteristic.Name, this.cronoDefaultName);
             }
         }
         else {
-            this.cronoSwitchService.updateCharacteristic(Characteristic.Name, 'Schedule');
+            this.cronoSwitchService.updateCharacteristic(Characteristic.Name, this.cronoDefaultName);
         }
     }
     calculateNextEvent(schedule) {

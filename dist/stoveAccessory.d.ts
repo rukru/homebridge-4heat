@@ -10,6 +10,7 @@ export declare class StoveAccessory {
     private readonly defaultName;
     private readonly sensorServices;
     private cronoSwitchService;
+    private cronoDefaultName;
     private targetOverride;
     private targetOverrideExpiry;
     private switchDebounceTimer;

@@ -69,6 +69,13 @@
         "default": false,
         "description": "Show a switch in HomeKit to enable/disable the stove's built-in timer schedule. Schedule must be configured using the 4HEAT app."
       },
+      "cronoName": {
+        "title": "Schedule Switch Name",
+        "type": "string",
+        "default": "Schedule",
+        "description": "Display name for the crono switch in Apple Home",
+        "condition": { "functionBody": "return model.cronoSwitch === true;" }
+      },
       "sensors": {
         "title": "Sensors",
         "type": "object",
@@ -147,7 +154,7 @@
     {
       "type": "fieldset",
       "title": "Thermostat",
-      "items": ["minTemp", "maxTemp", "switchDebounce", "cronoSwitch"]
+      "items": ["minTemp", "maxTemp", "switchDebounce", "cronoSwitch", "cronoName"]
     },
     {
       "type": "fieldset",

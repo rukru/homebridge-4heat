@@ -21,6 +21,7 @@ export interface FourHeatConfig extends PlatformConfig {
     switchDebounce?: number;
     logLevel?: 'normal' | 'verbose' | 'debug';
     cronoSwitch?: boolean;
+    cronoName?: string;
 }
 export interface DiscoveredDevice {
     id: string;

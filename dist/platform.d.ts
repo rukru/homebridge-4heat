@@ -16,6 +16,7 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private consecutiveFailures;
     private backoffTimer;
     private cachedSchedule;
+    private originalPeriodo;
     private pollCount;
     private static readonly CCG_POLL_INTERVAL;
     constructor(log: Logging, config: FourHeatConfig, api: API);

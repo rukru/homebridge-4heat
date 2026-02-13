@@ -1,6 +1,6 @@
 import type { PlatformAccessory, CharacteristicValue, Service } from 'homebridge';
 import type { DeviceState } from './types.js';
-import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
 import { applyPosPunto } from './protocol.js';
 import type { FourHeatPlatform } from './platform.js';
 
@@ -121,15 +121,12 @@ export class StoveAccessory {
       );
     }
 
-    const onOffParam = state.parameters.get(PARAM_ON_OFF);
-    if (onOffParam) {
-      this.thermostatService.updateCharacteristic(
-        Characteristic.TargetHeatingCoolingState,
-        onOffParam.value === 1
-          ? Characteristic.TargetHeatingCoolingState.HEAT
-          : Characteristic.TargetHeatingCoolingState.OFF,
-      );
-    }
+    this.thermostatService.updateCharacteristic(
+      Characteristic.TargetHeatingCoolingState,
+      this.isActiveState(state.stato)
+        ? Characteristic.TargetHeatingCoolingState.HEAT
+        : Characteristic.TargetHeatingCoolingState.OFF,
+    );
 
     // Room temperature sensor (created dynamically on first data)
     const roomSensor = state.sensors.get(SENSOR_ROOM_TEMP);
@@ -172,6 +169,10 @@ export class StoveAccessory {
     return Characteristic.CurrentHeatingCoolingState.OFF;
   }
 
+  private isActiveState(stato: number): boolean {
+    return stato !== STATO.OFF && stato !== STATO.EXTINGUISHING;
+  }
+
   private isInFaultState(stato: number): boolean {
     return stato === STATO.BLOCK || stato === STATO.SAFETY_MODE;
   }
@@ -183,11 +184,10 @@ export class StoveAccessory {
 
   private getTargetHeatingState(): number {
     const { Characteristic } = this.platform;
-    const param = this.platform.deviceState?.parameters.get(PARAM_ON_OFF);
-    if (param && param.value === 1) {
-      return Characteristic.TargetHeatingCoolingState.HEAT;
-    }
-    return Characteristic.TargetHeatingCoolingState.OFF;
+    const stato = this.platform.deviceState?.stato ?? 0;
+    return this.isActiveState(stato)
+      ? Characteristic.TargetHeatingCoolingState.HEAT
+      : Characteristic.TargetHeatingCoolingState.OFF;
   }
 
   private async setTargetHeatingState(value: CharacteristicValue) {

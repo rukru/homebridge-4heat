@@ -1,5 +1,6 @@
-import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_ROOM_TEMP } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_DEFINITIONS } from './types.js';
 import { applyPosPunto } from './protocol.js';
+import { DEFAULT_SWITCH_DEBOUNCE } from './settings.js';
 export class StoveAccessory {
     platform;
     accessory;
@@ -15,9 +16,11 @@ export class StoveAccessory {
     static TARGET_OVERRIDE_TTL = 60_000; // 60s
     thermostatService;
     defaultName;
-    roomTempService = null;
+    sensorServices = new Map();
     targetOverride = null;
     targetOverrideExpiry = 0;
+    switchDebounceTimer = null;
+    pendingSwitchTarget = null;
     constructor(platform, accessory) {
         this.platform = platform;
         this.accessory = accessory;
@@ -64,6 +67,88 @@ export class StoveAccessory {
         if (legacySwitch) {
             accessory.removeService(legacySwitch);
         }
+        // Remove legacy "Room Temperature" service from previous version
+        const legacyRoomTemp = accessory.getService('Room Temperature');
+        if (legacyRoomTemp) {
+            accessory.removeService(legacyRoomTemp);
+            platform.log.info('Removed legacy Room Temperature service');
+        }
+        // --- Sensor services ---
+        this.setupSensorServices();
+    }
+    setupSensorServices() {
+        const sensorsConfig = this.platform.config.sensors ?? {};
+        const enabledSubtypes = new Set();
+        for (const meta of SENSOR_DEFINITIONS) {
+            if (sensorsConfig[meta.configKey]) {
+                this.createSensorService(meta);
+                enabledSubtypes.add(meta.subtype);
+            }
+        }
+        // Remove stale sensor services (disabled but cached from previous config)
+        const allSubtypes = new Set(SENSOR_DEFINITIONS.map(m => m.subtype));
+        for (const service of this.accessory.services) {
+            const subtype = service.subtype;
+            if (subtype && allSubtypes.has(subtype) && !enabledSubtypes.has(subtype)) {
+                this.accessory.removeService(service);
+                this.platform.log.info('Removed disabled sensor service: %s', subtype);
+            }
+        }
+    }
+    createSensorService(meta) {
+        const { Service, Characteristic } = this.platform;
+        let service = this.accessory.getServiceById(this.getHAPServiceType(meta.serviceType), meta.subtype);
+        if (!service) {
+            service = this.accessory.addService(this.getHAPServiceType(meta.serviceType), meta.displayName, meta.subtype);
+        }
+        if (meta.serviceType === 'TemperatureSensor') {
+            service.getCharacteristic(Characteristic.CurrentTemperature)
+                .setProps({ minValue: -40, maxValue: 1000, minStep: 0.1 })
+                .onGet(() => this.getSensorValue(meta));
+        }
+        else if (meta.serviceType === 'HumiditySensor') {
+            service.getCharacteristic(Characteristic.CurrentRelativeHumidity)
+                .onGet(() => this.getSensorValue(meta));
+        }
+        else if (meta.serviceType === 'LightSensor') {
+            service.getCharacteristic(Characteristic.CurrentAmbientLightLevel)
+                .setProps({ minValue: 0.0001, maxValue: 100000 })
+                .onGet(() => this.getSensorValue(meta));
+        }
+        this.thermostatService.addLinkedService(service);
+        this.sensorServices.set(meta.id, { service, meta });
+        this.platform.log.info('Sensor service created: %s', meta.displayName);
+    }
+    getHAPServiceType(serviceType) {
+        const { Service } = this.platform;
+        switch (serviceType) {
+            case 'TemperatureSensor': return Service.TemperatureSensor;
+            case 'HumiditySensor': return Service.HumiditySensor;
+            case 'LightSensor': return Service.LightSensor;
+            default: return Service.TemperatureSensor;
+        }
+    }
+    getSensorValue(meta) {
+        const state = this.platform.deviceState;
+        const sensor = state?.sensors.get(meta.id);
+        if (!sensor || !state) {
+            return meta.serviceType === 'LightSensor' ? 0.0001 : 0;
+        }
+        const raw = sensor.valore;
+        if (meta.serviceType === 'TemperatureSensor') {
+            return applyPosPunto(raw, state.posPunto);
+        }
+        if (meta.serviceType === 'HumiditySensor') {
+            const range = sensor.max - sensor.min;
+            if (range <= 0)
+                return 0;
+            const pct = ((raw - sensor.min) / range) * 100;
+            return Math.max(0, Math.min(100, pct));
+        }
+        if (meta.serviceType === 'LightSensor') {
+            return Math.max(0.0001, raw);
+        }
+        return raw;
     }
     updateState(state) {
         const { Characteristic } = this.platform;
@@ -93,31 +178,24 @@ export class StoveAccessory {
             }
         }
         this.thermostatService.updateCharacteristic(Characteristic.TargetHeatingCoolingState, this.targetOverride ?? derivedTarget);
-        // Room temperature sensor (created dynamically on first data)
-        const roomSensor = state.sensors.get(SENSOR_ROOM_TEMP);
-        if (roomSensor) {
-            if (!this.roomTempService) {
-                this.createRoomTempService();
+        // Update sensor services
+        for (const [sensorId, { service, meta }] of this.sensorServices) {
+            const sensor = state.sensors.get(sensorId);
+            if (!sensor)
+                continue;
+            if (meta.serviceType === 'TemperatureSensor') {
+                const temp = applyPosPunto(sensor.valore, state.posPunto);
+                service.updateCharacteristic(Characteristic.CurrentTemperature, temp);
             }
-            const roomTemp = applyPosPunto(roomSensor.valore, state.posPunto);
-            this.roomTempService.updateCharacteristic(Characteristic.CurrentTemperature, roomTemp);
+            else if (meta.serviceType === 'HumiditySensor') {
+                const range = sensor.max - sensor.min;
+                const pct = range > 0 ? ((sensor.valore - sensor.min) / range) * 100 : 0;
+                service.updateCharacteristic(Characteristic.CurrentRelativeHumidity, Math.max(0, Math.min(100, pct)));
+            }
+            else if (meta.serviceType === 'LightSensor') {
+                service.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.max(0.0001, sensor.valore));
+            }
         }
-    }
-    createRoomTempService() {
-        const { Service, Characteristic } = this.platform;
-        this.roomTempService = this.accessory.getService('Room Temperature')
-            ?? this.accessory.addService(Service.TemperatureSensor, 'Room Temperature', 'room-temp');
-        this.roomTempService.getCharacteristic(Characteristic.CurrentTemperature)
-            .setProps({ minValue: -40, maxValue: 100, minStep: 0.1 })
-            .onGet(() => {
-            const sensor = this.platform.deviceState?.sensors.get(SENSOR_ROOM_TEMP);
-            if (sensor && this.platform.deviceState) {
-                return applyPosPunto(sensor.valore, this.platform.deviceState.posPunto);
-            }
-            return 0;
-        });
-        this.thermostatService.addLinkedService(this.roomTempService);
-        this.platform.log.info('Room temperature sensor detected, service created');
     }
     mapCurrentState(stato) {
         const { Characteristic } = this.platform;
@@ -151,14 +229,48 @@ export class StoveAccessory {
         const target = value;
         this.targetOverride = target;
         this.targetOverrideExpiry = Date.now() + StoveAccessory.TARGET_OVERRIDE_TTL;
+        const debounceSeconds = this.platform.config.switchDebounce ?? DEFAULT_SWITCH_DEBOUNCE;
+        if (debounceSeconds > 0) {
+            if (this.switchDebounceTimer) {
+                clearTimeout(this.switchDebounceTimer);
+                const prevLabel = this.pendingSwitchTarget === Characteristic.TargetHeatingCoolingState.HEAT ? 'ON' : 'OFF';
+                this.platform.log.info('Debounce: cancelled pending %s command', prevLabel);
+            }
+            const label = target === Characteristic.TargetHeatingCoolingState.HEAT ? 'ON' : 'OFF';
+            this.platform.log.info('Debounce: will turn %s in %ds', label, debounceSeconds);
+            this.pendingSwitchTarget = target;
+            this.switchDebounceTimer = setTimeout(async () => {
+                this.switchDebounceTimer = null;
+                this.pendingSwitchTarget = null;
+                await this.executeSwitchCommand(target);
+            }, debounceSeconds * 1000);
+        }
+        else {
+            await this.executeSwitchCommand(target);
+        }
+    }
+    async executeSwitchCommand(target) {
+        const { Characteristic } = this.platform;
+        let success;
         if (target === Characteristic.TargetHeatingCoolingState.HEAT) {
             this.platform.log.info('Turning stove ON');
-            await this.platform.turnOn();
+            success = await this.platform.turnOn();
         }
         else {
             this.platform.log.info('Turning stove OFF');
-            await this.platform.turnOff();
+            success = await this.platform.turnOff();
         }
+        if (!success) {
+            this.targetOverride = null;
+            this.thermostatService.updateCharacteristic(Characteristic.TargetHeatingCoolingState, this.deriveTargetFromState());
+        }
+    }
+    deriveTargetFromState() {
+        const { Characteristic } = this.platform;
+        const stato = this.platform.deviceState?.stato ?? 0;
+        return this.isActiveState(stato)
+            ? Characteristic.TargetHeatingCoolingState.HEAT
+            : Characteristic.TargetHeatingCoolingState.OFF;
     }
     getCurrentTemperature() {
         return this.platform.deviceState?.tempPrinc ?? 0;

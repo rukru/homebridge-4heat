@@ -1,10 +1,24 @@
 import type { PlatformConfig } from 'homebridge';
+export interface SensorsConfig {
+    exhaustTemp?: boolean;
+    roomTemp?: boolean;
+    boilerTemp?: boolean;
+    dhwTemp?: boolean;
+    bufferTemp?: boolean;
+    flowTemp?: boolean;
+    externalTemp?: boolean;
+    waterPressure?: boolean;
+    flameLight?: boolean;
+    airFlow?: boolean;
+}
 export interface FourHeatConfig extends PlatformConfig {
     host?: string;
     port?: number;
     pollingInterval?: number;
     minTemp?: number;
     maxTemp?: number;
+    sensors?: SensorsConfig;
+    switchDebounce?: number;
 }
 export interface DiscoveredDevice {
     id: string;
@@ -67,3 +81,12 @@ export declare const STATO: {
 };
 export declare const STATO_LABELS: Record<number, string>;
 export declare const ERROR_CODES: Record<number, string>;
+export type SensorServiceType = 'TemperatureSensor' | 'HumiditySensor' | 'LightSensor';
+export interface SensorMeta {
+    id: number;
+    configKey: keyof SensorsConfig;
+    displayName: string;
+    serviceType: SensorServiceType;
+    subtype: string;
+}
+export declare const SENSOR_DEFINITIONS: SensorMeta[];

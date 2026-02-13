@@ -8,7 +8,7 @@ import type {
   Characteristic,
 } from 'homebridge';
 import type { FourHeatConfig, DeviceState } from './types.js';
-import { PARAM_TEMP_SETPOINT, STATO, STATO_LABELS, ERROR_CODES } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS } from './types.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -56,6 +56,13 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
 
   private async didFinishLaunching() {
     this.log.info('Starting homebridge-4heat v%s', PLUGIN_VERSION);
+
+    const sensorsConfig = this.config.sensors ?? {};
+    const enabledSensors = SENSOR_DEFINITIONS.filter(s => sensorsConfig[s.configKey]);
+    if (enabledSensors.length > 0) {
+      this.log.info('Enabled sensors: %s', enabledSensors.map(s => s.displayName).join(', '));
+    }
+
     const host = this.config.host;
     const port = this.config.port ?? DEFAULT_PORT;
 

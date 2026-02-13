@@ -43,8 +43,112 @@
         "default": 75,
         "minimum": 0,
         "maximum": 100
+      },
+      "switchDebounce": {
+        "title": "On/Off Debounce (seconds)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 30,
+        "description": "Delay before executing on/off command. If reversed within this time, the command is cancelled. Set to 0 to disable."
+      },
+      "sensors": {
+        "title": "Sensors",
+        "type": "object",
+        "properties": {
+          "exhaustTemp": {
+            "title": "Exhaust Temperature (0xFFFF)",
+            "type": "boolean",
+            "default": false,
+            "description": "Flue gas / exhaust temperature sensor"
+          },
+          "roomTemp": {
+            "title": "Room Temperature (0xFFF7)",
+            "type": "boolean",
+            "default": false,
+            "description": "Room ambient temperature sensor"
+          },
+          "boilerTemp": {
+            "title": "Boiler Temperature (0xFFFC)",
+            "type": "boolean",
+            "default": false,
+            "description": "Boiler water temperature sensor"
+          },
+          "dhwTemp": {
+            "title": "DHW Temperature (0xFFE2)",
+            "type": "boolean",
+            "default": false,
+            "description": "Domestic hot water temperature sensor"
+          },
+          "bufferTemp": {
+            "title": "Buffer Temperature (0xFFFA)",
+            "type": "boolean",
+            "default": false,
+            "description": "Buffer tank temperature sensor"
+          },
+          "flowTemp": {
+            "title": "Flow Temperature (0xFFE4)",
+            "type": "boolean",
+            "default": false,
+            "description": "Heating circuit flow temperature sensor"
+          },
+          "externalTemp": {
+            "title": "External Temperature (0xFFF6)",
+            "type": "boolean",
+            "default": false,
+            "description": "Outdoor ambient temperature sensor"
+          },
+          "waterPressure": {
+            "title": "Water Pressure (0xFFFB)",
+            "type": "boolean",
+            "default": false,
+            "description": "Water pressure sensor (displayed as humidity 0-100%)"
+          },
+          "flameLight": {
+            "title": "Flame Light (0xFFFD)",
+            "type": "boolean",
+            "default": false,
+            "description": "Flame light / photocell sensor (displayed as light level)"
+          },
+          "airFlow": {
+            "title": "Air Flow (0xFFED)",
+            "type": "boolean",
+            "default": false,
+            "description": "Combustion air flow sensor (displayed as light level)"
+          }
+        }
       }
     },
     "required": ["name"]
-  }
+  },
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "Connection",
+      "items": ["name", "host", "port", "pollingInterval"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Thermostat",
+      "items": ["minTemp", "maxTemp", "switchDebounce"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Sensors",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "sensors.exhaustTemp",
+        "sensors.roomTemp",
+        "sensors.boilerTemp",
+        "sensors.dhwTemp",
+        "sensors.bufferTemp",
+        "sensors.flowTemp",
+        "sensors.externalTemp",
+        "sensors.waterPressure",
+        "sensors.flameLight",
+        "sensors.airFlow"
+      ]
+    }
+  ]
 }

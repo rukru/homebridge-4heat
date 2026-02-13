@@ -119,4 +119,16 @@ export const ERROR_CODES = {
     207: 'Heating sensor timeout',
     208: 'Overheated lambda sensor',
 };
+export const SENSOR_DEFINITIONS = [
+    { id: SENSOR_EXHAUST_TEMP, configKey: 'exhaustTemp', displayName: 'Exhaust Temperature', serviceType: 'TemperatureSensor', subtype: 'exhaust-temp' },
+    { id: SENSOR_ROOM_TEMP, configKey: 'roomTemp', displayName: 'Room Temperature', serviceType: 'TemperatureSensor', subtype: 'room-temp' },
+    { id: SENSOR_BOILER_TEMP, configKey: 'boilerTemp', displayName: 'Boiler Temperature', serviceType: 'TemperatureSensor', subtype: 'boiler-temp' },
+    { id: SENSOR_DHW_TEMP, configKey: 'dhwTemp', displayName: 'DHW Temperature', serviceType: 'TemperatureSensor', subtype: 'dhw-temp' },
+    { id: SENSOR_BUFFER_TEMP, configKey: 'bufferTemp', displayName: 'Buffer Temperature', serviceType: 'TemperatureSensor', subtype: 'buffer-temp' },
+    { id: SENSOR_FLOW_TEMP_1, configKey: 'flowTemp', displayName: 'Flow Temperature', serviceType: 'TemperatureSensor', subtype: 'flow-temp' },
+    { id: SENSOR_EXTERNAL_TEMP, configKey: 'externalTemp', displayName: 'External Temperature', serviceType: 'TemperatureSensor', subtype: 'external-temp' },
+    { id: SENSOR_WATER_PRESSURE, configKey: 'waterPressure', displayName: 'Water Pressure', serviceType: 'HumiditySensor', subtype: 'water-pressure' },
+    { id: SENSOR_FLAME_LIGHT, configKey: 'flameLight', displayName: 'Flame Light', serviceType: 'LightSensor', subtype: 'flame-light' },
+    { id: SENSOR_AIR_FLOW, configKey: 'airFlow', displayName: 'Air Flow', serviceType: 'LightSensor', subtype: 'air-flow' },
+];
 //# sourceMappingURL=types.js.map

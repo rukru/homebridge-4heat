@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS } from './types.js';
+import { STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS, CRONO_PERIODO_LABELS } from './types.js';
+import { buildCCSDisableCommand, buildCCSEnableCommand } from './protocol.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -21,6 +22,9 @@ export class FourHeatPlatform {
     pollingTimer = null;
     consecutiveFailures = 0;
     backoffTimer = null;
+    cachedSchedule = null;
+    pollCount = 0;
+    static CCG_POLL_INTERVAL = 10;
     constructor(log, config, api) {
         this.log = log;
         this.api = api;
@@ -44,6 +48,9 @@ export class FourHeatPlatform {
         const enabledSensors = SENSOR_DEFINITIONS.filter(s => sensorsConfig[s.configKey]);
         if (enabledSensors.length > 0) {
             this.log.info('Enabled sensors: %s', enabledSensors.map(s => s.displayName).join(', '));
+        }
+        if (this.config.cronoSwitch) {
+            this.log.info('Crono schedule switch enabled');
         }
         const host = this.config.host;
         const port = this.config.port ?? DEFAULT_PORT;
@@ -103,6 +110,13 @@ export class FourHeatPlatform {
                 this.consecutiveFailures = 0;
                 this.deviceState = state;
                 this.stoveAccessory?.updateState(state);
+                if (this.config.cronoSwitch) {
+                    this.pollCount++;
+                    if (this.cachedSchedule === null || this.pollCount % FourHeatPlatform.CCG_POLL_INTERVAL === 0) {
+                        await this.refreshSchedule();
+                    }
+                    this.stoveAccessory?.updateCronoState(state, this.cachedSchedule);
+                }
                 if (state.errore > 0) {
                     const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown error';
                     this.log.warn('Stove error %d: %s (state=%s)', state.errore, errorDesc, STATO_LABELS[state.stato] ?? state.stato);
@@ -182,6 +196,57 @@ export class FourHeatPlatform {
             await this.poll();
         }
         return success;
+    }
+    async refreshSchedule() {
+        try {
+            const schedule = await this.client.readSchedule();
+            if (schedule) {
+                this.cachedSchedule = schedule;
+                if (this.logLevel !== 'normal') {
+                    this.log.info('Schedule refreshed: periodo=%s', CRONO_PERIODO_LABELS[schedule.periodo] ?? String(schedule.periodo));
+                }
+            }
+        }
+        catch (err) {
+            this.log.warn('Failed to read schedule: %s', err);
+        }
+    }
+    async enableCrono() {
+        if (!this.cachedSchedule) {
+            await this.refreshSchedule();
+        }
+        if (!this.cachedSchedule || this.cachedSchedule.periodo === 0) {
+            this.log.warn('Cannot enable crono: no schedule configured. Use the 4HEAT app to set up a schedule first.');
+            return false;
+        }
+        this.log.info('Enabling crono (periodo=%s)', CRONO_PERIODO_LABELS[this.cachedSchedule.periodo] ?? String(this.cachedSchedule.periodo));
+        const cmd = buildCCSEnableCommand(this.cachedSchedule);
+        const success = await this.client.writeSchedule(cmd);
+        if (success) {
+            await this.refreshSchedule();
+            await this.poll();
+        }
+        return success;
+    }
+    async disableCrono() {
+        if (!this.cachedSchedule) {
+            await this.refreshSchedule();
+        }
+        if (!this.cachedSchedule) {
+            this.log.warn('Cannot disable crono: no schedule data available');
+            return false;
+        }
+        this.log.info('Disabling crono');
+        const cmd = buildCCSDisableCommand(this.cachedSchedule);
+        const success = await this.client.writeSchedule(cmd);
+        if (success) {
+            await this.refreshSchedule();
+            await this.poll();
+        }
+        return success;
+    }
+    get schedule() {
+        return this.cachedSchedule;
     }
     get minTemp() {
         return this.config.minTemp ?? DEFAULT_MIN_TEMP;

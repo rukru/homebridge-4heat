@@ -1,7 +1,7 @@
 {
   "name": "homebridge-4heat",
   "displayName": "4HEAT PinKEY",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Homebridge plugin for 4HEAT PinKEY in box pellet stove controller (2ways protocol)",
   "type": "module",
   "main": "dist/index.js",

@@ -131,4 +131,23 @@ export const SENSOR_DEFINITIONS = [
     { id: SENSOR_FLAME_LIGHT, configKey: 'flameLight', displayName: 'Flame Light', serviceType: 'LightSensor', subtype: 'flame-light' },
     { id: SENSOR_AIR_FLOW, configKey: 'airFlow', displayName: 'Air Flow', serviceType: 'LightSensor', subtype: 'air-flow' },
 ];
+// --- Crono (schedule) types ---
+export const STATO_CRONO = {
+    DAILY: 0x20,
+    WEEKLY: 0x21,
+    WEEKEND: 0x22,
+    OFF: 0x23,
+};
+export const CRONO_PERIODO = {
+    OFF: 0,
+    DAILY: 1,
+    WEEKLY: 2,
+    WEEKEND: 3,
+};
+export const CRONO_PERIODO_LABELS = {
+    0: 'Off',
+    1: 'Daily',
+    2: 'Weekly',
+    3: 'Weekend',
+};
 //# sourceMappingURL=types.js.map

@@ -7,8 +7,9 @@ import type {
   Service,
   Characteristic,
 } from 'homebridge';
-import type { FourHeatConfig, DeviceState } from './types.js';
-import { PARAM_TEMP_SETPOINT, STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS } from './types.js';
+import type { FourHeatConfig, DeviceState, CronoSchedule } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, STATO_LABELS, ERROR_CODES, SENSOR_DEFINITIONS, CRONO_PERIODO_LABELS } from './types.js';
+import { buildCCSDisableCommand, buildCCSEnableCommand } from './protocol.js';
 import { PLATFORM_NAME, PLUGIN_NAME, DEFAULT_PORT, DEFAULT_POLLING_INTERVAL, DEFAULT_MIN_TEMP, DEFAULT_MAX_TEMP } from './settings.js';
 import { FourHeatClient } from './client.js';
 import { wakeAndDiscover } from './udp.js';
@@ -33,6 +34,9 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private consecutiveFailures = 0;
   private backoffTimer: ReturnType<typeof setTimeout> | null = null;
+  private cachedSchedule: CronoSchedule | null = null;
+  private pollCount = 0;
+  private static readonly CCG_POLL_INTERVAL = 10;
 
   constructor(
     public readonly log: Logging,
@@ -64,6 +68,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     const enabledSensors = SENSOR_DEFINITIONS.filter(s => sensorsConfig[s.configKey]);
     if (enabledSensors.length > 0) {
       this.log.info('Enabled sensors: %s', enabledSensors.map(s => s.displayName).join(', '));
+    }
+
+    if (this.config.cronoSwitch) {
+      this.log.info('Crono schedule switch enabled');
     }
 
     const host = this.config.host;
@@ -129,6 +137,14 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
         this.consecutiveFailures = 0;
         this.deviceState = state;
         this.stoveAccessory?.updateState(state);
+
+        if (this.config.cronoSwitch) {
+          this.pollCount++;
+          if (this.cachedSchedule === null || this.pollCount % FourHeatPlatform.CCG_POLL_INTERVAL === 0) {
+            await this.refreshSchedule();
+          }
+          this.stoveAccessory?.updateCronoState(state, this.cachedSchedule);
+        }
 
         if (state.errore > 0) {
           const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown error';
@@ -220,6 +236,60 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
       await this.poll();
     }
     return success;
+  }
+
+  private async refreshSchedule() {
+    try {
+      const schedule = await this.client.readSchedule();
+      if (schedule) {
+        this.cachedSchedule = schedule;
+        if (this.logLevel !== 'normal') {
+          this.log.info('Schedule refreshed: periodo=%s', CRONO_PERIODO_LABELS[schedule.periodo] ?? String(schedule.periodo));
+        }
+      }
+    } catch (err) {
+      this.log.warn('Failed to read schedule: %s', err);
+    }
+  }
+
+  async enableCrono(): Promise<boolean> {
+    if (!this.cachedSchedule) {
+      await this.refreshSchedule();
+    }
+    if (!this.cachedSchedule || this.cachedSchedule.periodo === 0) {
+      this.log.warn('Cannot enable crono: no schedule configured. Use the 4HEAT app to set up a schedule first.');
+      return false;
+    }
+    this.log.info('Enabling crono (periodo=%s)', CRONO_PERIODO_LABELS[this.cachedSchedule.periodo] ?? String(this.cachedSchedule.periodo));
+    const cmd = buildCCSEnableCommand(this.cachedSchedule);
+    const success = await this.client.writeSchedule(cmd);
+    if (success) {
+      await this.refreshSchedule();
+      await this.poll();
+    }
+    return success;
+  }
+
+  async disableCrono(): Promise<boolean> {
+    if (!this.cachedSchedule) {
+      await this.refreshSchedule();
+    }
+    if (!this.cachedSchedule) {
+      this.log.warn('Cannot disable crono: no schedule data available');
+      return false;
+    }
+    this.log.info('Disabling crono');
+    const cmd = buildCCSDisableCommand(this.cachedSchedule);
+    const success = await this.client.writeSchedule(cmd);
+    if (success) {
+      await this.refreshSchedule();
+      await this.poll();
+    }
+    return success;
+  }
+
+  get schedule(): CronoSchedule | null {
+    return this.cachedSchedule;
   }
 
   get minTemp(): number {

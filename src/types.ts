@@ -22,6 +22,7 @@ export interface FourHeatConfig extends PlatformConfig {
   sensors?: SensorsConfig;
   switchDebounce?: number;
   logLevel?: 'normal' | 'verbose' | 'debug';
+  cronoSwitch?: boolean;
 }
 
 export interface DiscoveredDevice {
@@ -36,6 +37,7 @@ export interface DeviceState {
   tempPrinc: number;
   tempSec: number;
   posPunto: number;
+  statoCrono: number;
   parameters: Map<number, ParameterValue>;
   sensors: Map<number, SensorValue>;
   lastUpdate: Date;
@@ -209,3 +211,43 @@ export const SENSOR_DEFINITIONS: SensorMeta[] = [
   { id: SENSOR_FLAME_LIGHT, configKey: 'flameLight', displayName: 'Flame Light', serviceType: 'LightSensor', subtype: 'flame-light' },
   { id: SENSOR_AIR_FLOW, configKey: 'airFlow', displayName: 'Air Flow', serviceType: 'LightSensor', subtype: 'air-flow' },
 ];
+
+// --- Crono (schedule) types ---
+
+export const STATO_CRONO = {
+  DAILY: 0x20,
+  WEEKLY: 0x21,
+  WEEKEND: 0x22,
+  OFF: 0x23,
+} as const;
+
+export const CRONO_PERIODO = {
+  OFF: 0,
+  DAILY: 1,
+  WEEKLY: 2,
+  WEEKEND: 3,
+} as const;
+
+export const CRONO_PERIODO_LABELS: Record<number, string> = {
+  0: 'Off',
+  1: 'Daily',
+  2: 'Weekly',
+  3: 'Weekend',
+};
+
+export interface CronoTimeSlot {
+  start: string;   // "HH:MM"
+  end: string;     // "HH:MM"
+  enabled: boolean;
+}
+
+export interface CronoDaySchedule {
+  dayNumber: number;        // 1-7 (Mon-Sun)
+  slots: CronoTimeSlot[];   // always 3 slots
+}
+
+export interface CronoSchedule {
+  periodo: number;            // 0=off, 1=daily, 2=weekly, 3=weekend
+  days: CronoDaySchedule[];   // always 7 days
+  rawResponse: string;        // original CCG response for reference
+}

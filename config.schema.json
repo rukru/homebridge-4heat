@@ -63,6 +63,12 @@
         "maximum": 30,
         "description": "Delay before executing on/off command. If reversed within this time, the command is cancelled. Set to 0 to disable."
       },
+      "cronoSwitch": {
+        "title": "Schedule Switch (Crono)",
+        "type": "boolean",
+        "default": false,
+        "description": "Show a switch in HomeKit to enable/disable the stove's built-in timer schedule. Schedule must be configured using the 4HEAT app."
+      },
       "sensors": {
         "title": "Sensors",
         "type": "object",
@@ -141,7 +147,7 @@
     {
       "type": "fieldset",
       "title": "Thermostat",
-      "items": ["minTemp", "maxTemp", "switchDebounce"]
+      "items": ["minTemp", "maxTemp", "switchDebounce", "cronoSwitch"]
     },
     {
       "type": "fieldset",

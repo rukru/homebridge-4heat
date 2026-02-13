@@ -20,6 +20,7 @@ export interface FourHeatConfig extends PlatformConfig {
     sensors?: SensorsConfig;
     switchDebounce?: number;
     logLevel?: 'normal' | 'verbose' | 'debug';
+    cronoSwitch?: boolean;
 }
 export interface DiscoveredDevice {
     id: string;
@@ -32,6 +33,7 @@ export interface DeviceState {
     tempPrinc: number;
     tempSec: number;
     posPunto: number;
+    statoCrono: number;
     parameters: Map<number, ParameterValue>;
     sensors: Map<number, SensorValue>;
     lastUpdate: Date;
@@ -91,3 +93,30 @@ export interface SensorMeta {
     subtype: string;
 }
 export declare const SENSOR_DEFINITIONS: SensorMeta[];
+export declare const STATO_CRONO: {
+    readonly DAILY: 32;
+    readonly WEEKLY: 33;
+    readonly WEEKEND: 34;
+    readonly OFF: 35;
+};
+export declare const CRONO_PERIODO: {
+    readonly OFF: 0;
+    readonly DAILY: 1;
+    readonly WEEKLY: 2;
+    readonly WEEKEND: 3;
+};
+export declare const CRONO_PERIODO_LABELS: Record<number, string>;
+export interface CronoTimeSlot {
+    start: string;
+    end: string;
+    enabled: boolean;
+}
+export interface CronoDaySchedule {
+    dayNumber: number;
+    slots: CronoTimeSlot[];
+}
+export interface CronoSchedule {
+    periodo: number;
+    days: CronoDaySchedule[];
+    rawResponse: string;
+}

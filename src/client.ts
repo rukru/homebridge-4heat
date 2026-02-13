@@ -8,7 +8,8 @@ import net from 'node:net';
 import type { Logging } from 'homebridge';
 import type { DeviceState, ParameterValue, SensorValue } from './types.js';
 import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
-import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto } from './protocol.js';
+import type { CronoSchedule } from './types.js';
+import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto, buildCCGCommand, parseCCGResponse } from './protocol.js';
 import { wakeAndDiscover } from './udp.js';
 
 export interface FourHeatClientOptions {
@@ -149,6 +150,7 @@ export class FourHeatClient {
       tempPrinc: 0,
       tempSec: 0,
       posPunto: 0,
+      statoCrono: 0x23,
       parameters: new Map(),
       sensors: new Map(),
       lastUpdate: new Date(),
@@ -186,6 +188,8 @@ export class FourHeatClient {
           max: parsed.max,
         };
         state.sensors.set(parsed.id, sensor);
+      } else if (parsed.type === 'state_info') {
+        state.statoCrono = parsed.statoCrono;
       }
     }
 
@@ -213,6 +217,17 @@ export class FourHeatClient {
     if (resp && resp.includes('"OK"')) {
       return true;
     }
+    return resp !== null;
+  }
+
+  async readSchedule(): Promise<CronoSchedule | null> {
+    const raw = await this.enqueue(buildCCGCommand());
+    if (!raw) return null;
+    return parseCCGResponse(raw);
+  }
+
+  async writeSchedule(command: string): Promise<boolean> {
+    const resp = await this.enqueue(command);
     return resp !== null;
   }
 }

@@ -118,6 +118,14 @@ export function parseHexDatapoint(h) {
                 max: parseInt(h.slice(8, 10), 16),
             };
         }
+        if (t === 0x08) {
+            return {
+                type: 'crono_enb',
+                id: parseInt(h.slice(2, 4), 16),
+                stato: parseInt(h.slice(4, 6), 16),
+                modalita: parseInt(h.slice(6, 8), 16),
+            };
+        }
         return { type: 'unknown', raw: h };
     }
     catch {
@@ -145,5 +153,59 @@ export function buildResetCommand() {
 }
 export function buildStatusCommand() {
     return '["2WL","0"]';
+}
+// --- Crono (schedule) protocol ---
+export function buildCCGCommand() {
+    return '["CCG","0"]';
+}
+export function parseCCGResponse(raw) {
+    const trimmed = raw.trim();
+    if (!trimmed.startsWith('["CCG"'))
+        return null;
+    const inner = trimmed.slice(1, -1);
+    const parts = inner.split('","');
+    parts[0] = parts[0].replace(/^"/, '');
+    parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
+    // parts: ["CCG", "71", "<periodo>", "1", "HH:MM", "HH:MM", "0|1", ...]
+    // Minimum: 3 header + 7 days × 10 fields = 73
+    if (parts.length < 73)
+        return null;
+    const periodo = parseInt(parts[2], 10);
+    const days = [];
+    let ptr = 3;
+    for (let d = 0; d < 7; d++) {
+        const dayNumber = parseInt(parts[ptr], 10);
+        ptr++;
+        const slots = [];
+        for (let s = 0; s < 3; s++) {
+            slots.push({
+                start: parts[ptr].substring(0, 5),
+                end: parts[ptr + 1].substring(0, 5),
+                enabled: parts[ptr + 2].substring(0, 1) === '1',
+            });
+            ptr += 3;
+        }
+        days.push({ dayNumber, slots });
+    }
+    return { periodo, days, rawResponse: trimmed };
+}
+export function buildCCSFromSchedule(schedule, newPeriodo) {
+    const periodo = newPeriodo ?? schedule.periodo;
+    let contatore = 1;
+    let body = '';
+    for (const day of schedule.days) {
+        body += `,"${day.dayNumber}"`;
+        for (const slot of day.slots) {
+            body += `,"${slot.start}","${slot.end}","${slot.enabled ? 1 : 0}"`;
+        }
+        contatore += 10;
+    }
+    return `["CCS","${contatore}","${periodo}"${body}]`;
+}
+export function buildCCSDisableCommand(schedule) {
+    return buildCCSFromSchedule(schedule, 0);
+}
+export function buildCCSEnableCommand(schedule) {
+    return buildCCSFromSchedule(schedule);
 }
 //# sourceMappingURL=protocol.js.map

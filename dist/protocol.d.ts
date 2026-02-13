@@ -2,6 +2,7 @@
  * 4HEAT 2ways protocol: hex parsing and command building.
  * Ported from 4heat_control.py
  */
+import type { CronoSchedule } from './types.js';
 export type ParsedDatapoint = {
     type: 'main_values';
     tempSec: number;
@@ -22,6 +23,11 @@ export type ParsedDatapoint = {
     type: 'state_text';
     id: number;
     text: string;
+} | {
+    type: 'crono_enb';
+    id: number;
+    stato: number;
+    modalita: number;
 } | {
     type: 'parameter';
     id: number;
@@ -74,3 +80,8 @@ export declare function buildOnCommand(): string;
 export declare function buildOffCommand(): string;
 export declare function buildResetCommand(): string;
 export declare function buildStatusCommand(): string;
+export declare function buildCCGCommand(): string;
+export declare function parseCCGResponse(raw: string): CronoSchedule | null;
+export declare function buildCCSFromSchedule(schedule: CronoSchedule, newPeriodo?: number): string;
+export declare function buildCCSDisableCommand(schedule: CronoSchedule): string;
+export declare function buildCCSEnableCommand(schedule: CronoSchedule): string;

@@ -1,5 +1,5 @@
 import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
-import type { FourHeatConfig, DeviceState } from './types.js';
+import type { FourHeatConfig, DeviceState, CronoSchedule } from './types.js';
 import { FourHeatClient } from './client.js';
 export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     readonly log: Logging;
@@ -15,6 +15,9 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private pollingTimer;
     private consecutiveFailures;
     private backoffTimer;
+    private cachedSchedule;
+    private pollCount;
+    private static readonly CCG_POLL_INTERVAL;
     constructor(log: Logging, config: FourHeatConfig, api: API);
     configureAccessory(accessory: PlatformAccessory): void;
     private didFinishLaunching;
@@ -26,6 +29,10 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     turnOn(): Promise<boolean>;
     turnOff(): Promise<boolean>;
     resetError(): Promise<boolean>;
+    private refreshSchedule;
+    enableCrono(): Promise<boolean>;
+    disableCrono(): Promise<boolean>;
+    get schedule(): CronoSchedule | null;
     get minTemp(): number;
     get maxTemp(): number;
 }

@@ -3,10 +3,13 @@
  * Ported from 4heat_control.py
  */
 
+import type { CronoSchedule, CronoTimeSlot, CronoDaySchedule } from './types.js';
+
 export type ParsedDatapoint =
   | { type: 'main_values'; tempSec: number; stato: number; errore: number; tempPrinc: number; posPunto: number }
   | { type: 'state_info'; statoCrono: number; potenza: string; lingua: number; ricetta: number; rs485Addr: number; termostato?: number; posPunto?: number }
   | { type: 'state_text'; id: number; text: string }
+  | { type: 'crono_enb'; id: number; stato: number; modalita: number }
   | { type: 'parameter'; id: number; valore: number; min: number; max: number; readOnly: boolean; posPunto: number }
   | { type: 'sensor'; id: number; valore: number; min: number; max: number; readOnly: boolean }
   | { type: 'thermostat'; id: number; abilitazione: number; status: number; valore: number; min: number; max: number; temperatura: number }
@@ -142,6 +145,15 @@ export function parseHexDatapoint(h: string): ParsedDatapoint {
       };
     }
 
+    if (t === 0x08) {
+      return {
+        type: 'crono_enb',
+        id: parseInt(h.slice(2, 4), 16),
+        stato: parseInt(h.slice(4, 6), 16),
+        modalita: parseInt(h.slice(6, 8), 16),
+      };
+    }
+
     return { type: 'unknown', raw: h };
   } catch {
     return { type: 'unknown', raw: h };
@@ -174,4 +186,69 @@ export function buildResetCommand(): string {
 
 export function buildStatusCommand(): string {
   return '["2WL","0"]';
+}
+
+// --- Crono (schedule) protocol ---
+
+export function buildCCGCommand(): string {
+  return '["CCG","0"]';
+}
+
+export function parseCCGResponse(raw: string): CronoSchedule | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('["CCG"')) return null;
+
+  const inner = trimmed.slice(1, -1);
+  const parts = inner.split('","');
+  parts[0] = parts[0].replace(/^"/, '');
+  parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
+
+  // parts: ["CCG", "71", "<periodo>", "1", "HH:MM", "HH:MM", "0|1", ...]
+  // Minimum: 3 header + 7 days × 10 fields = 73
+  if (parts.length < 73) return null;
+
+  const periodo = parseInt(parts[2], 10);
+  const days: CronoDaySchedule[] = [];
+
+  let ptr = 3;
+  for (let d = 0; d < 7; d++) {
+    const dayNumber = parseInt(parts[ptr], 10);
+    ptr++;
+    const slots: CronoTimeSlot[] = [];
+    for (let s = 0; s < 3; s++) {
+      slots.push({
+        start: parts[ptr].substring(0, 5),
+        end: parts[ptr + 1].substring(0, 5),
+        enabled: parts[ptr + 2].substring(0, 1) === '1',
+      });
+      ptr += 3;
+    }
+    days.push({ dayNumber, slots });
+  }
+
+  return { periodo, days, rawResponse: trimmed };
+}
+
+export function buildCCSFromSchedule(schedule: CronoSchedule, newPeriodo?: number): string {
+  const periodo = newPeriodo ?? schedule.periodo;
+  let contatore = 1;
+  let body = '';
+
+  for (const day of schedule.days) {
+    body += `,"${day.dayNumber}"`;
+    for (const slot of day.slots) {
+      body += `,"${slot.start}","${slot.end}","${slot.enabled ? 1 : 0}"`;
+    }
+    contatore += 10;
+  }
+
+  return `["CCS","${contatore}","${periodo}"${body}]`;
+}
+
+export function buildCCSDisableCommand(schedule: CronoSchedule): string {
+  return buildCCSFromSchedule(schedule, 0);
+}
+
+export function buildCCSEnableCommand(schedule: CronoSchedule): string {
+  return buildCCSFromSchedule(schedule);
 }

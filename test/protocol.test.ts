@@ -11,7 +11,13 @@ import {
   buildOffCommand,
   buildResetCommand,
   buildStatusCommand,
+  buildCCGCommand,
+  parseCCGResponse,
+  buildCCSFromSchedule,
+  buildCCSDisableCommand,
+  buildCCSEnableCommand,
 } from '../src/protocol.js';
+import type { CronoSchedule } from '../src/types.js';
 
 describe('signed16', () => {
   it('positive value stays positive', () => {
@@ -314,6 +320,158 @@ describe('command builders', () => {
     it('handles zero value', () => {
       const result = build2WCCommand('0E0180000100000001', 0);
       assert.equal(result, '["2WC","1","050E01800000"]');
+    });
+  });
+});
+
+describe('type 0x08 — crono_enb', () => {
+  it('parses crono_enb', () => {
+    // t=08, id=01, stato=01, modalita=02
+    const hex = '08010102';
+    const result = parseHexDatapoint(hex);
+    assert.equal(result.type, 'crono_enb');
+    if (result.type === 'crono_enb') {
+      assert.equal(result.id, 1);
+      assert.equal(result.stato, 1);
+      assert.equal(result.modalita, 2);
+    }
+  });
+
+  it('parses crono_enb with stato=0 (disabled)', () => {
+    const hex = '08010000';
+    const result = parseHexDatapoint(hex);
+    assert.equal(result.type, 'crono_enb');
+    if (result.type === 'crono_enb') {
+      assert.equal(result.stato, 0);
+      assert.equal(result.modalita, 0);
+    }
+  });
+});
+
+describe('crono CCG/CCS protocol', () => {
+  function buildTestCCGResponse(periodo: number): string {
+    const parts: string[] = ['CCG', '71', String(periodo)];
+    for (let d = 1; d <= 7; d++) {
+      parts.push(String(d));
+      parts.push('07:00', '12:00', '1'); // slot 1 enabled
+      parts.push('14:00', '22:00', '1'); // slot 2 enabled
+      parts.push('00:00', '00:00', '0'); // slot 3 disabled
+    }
+    return '["' + parts.join('","') + '"]';
+  }
+
+  function makeTestSchedule(periodo: number): CronoSchedule {
+    const days = [];
+    for (let d = 1; d <= 7; d++) {
+      days.push({
+        dayNumber: d,
+        slots: [
+          { start: '07:00', end: '12:00', enabled: true },
+          { start: '14:00', end: '22:00', enabled: true },
+          { start: '00:00', end: '00:00', enabled: false },
+        ],
+      });
+    }
+    return { periodo, days, rawResponse: '' };
+  }
+
+  describe('buildCCGCommand', () => {
+    it('returns CCG read command', () => {
+      assert.equal(buildCCGCommand(), '["CCG","0"]');
+    });
+  });
+
+  describe('parseCCGResponse', () => {
+    it('parses valid CCG response with weekly schedule', () => {
+      const raw = buildTestCCGResponse(2);
+      const result = parseCCGResponse(raw);
+      assert.ok(result);
+      assert.equal(result.periodo, 2);
+      assert.equal(result.days.length, 7);
+      assert.equal(result.days[0].dayNumber, 1);
+      assert.equal(result.days[0].slots[0].start, '07:00');
+      assert.equal(result.days[0].slots[0].end, '12:00');
+      assert.equal(result.days[0].slots[0].enabled, true);
+      assert.equal(result.days[0].slots[2].enabled, false);
+      assert.equal(result.days[6].dayNumber, 7);
+    });
+
+    it('parses disabled schedule (periodo=0)', () => {
+      const raw = buildTestCCGResponse(0);
+      const result = parseCCGResponse(raw);
+      assert.ok(result);
+      assert.equal(result.periodo, 0);
+    });
+
+    it('returns null for non-CCG response', () => {
+      assert.equal(parseCCGResponse('["2WL","0"]'), null);
+    });
+
+    it('returns null for too-short response', () => {
+      assert.equal(parseCCGResponse('["CCG","1","2"]'), null);
+    });
+
+    it('returns null for empty string', () => {
+      assert.equal(parseCCGResponse(''), null);
+    });
+
+    it('preserves rawResponse', () => {
+      const raw = buildTestCCGResponse(1);
+      const result = parseCCGResponse(raw);
+      assert.ok(result);
+      assert.equal(result.rawResponse, raw);
+    });
+  });
+
+  describe('buildCCSFromSchedule', () => {
+    it('builds CCS command preserving original periodo', () => {
+      const schedule = makeTestSchedule(2);
+      const cmd = buildCCSFromSchedule(schedule);
+      assert.ok(cmd.startsWith('["CCS","71","2"'));
+      assert.ok(cmd.includes('"07:00"'));
+      assert.ok(cmd.includes('"12:00"'));
+      assert.ok(cmd.includes('"1"')); // enabled slot
+      assert.ok(cmd.includes('"0"')); // disabled slot
+    });
+
+    it('overrides periodo when specified', () => {
+      const schedule = makeTestSchedule(2);
+      const cmd = buildCCSFromSchedule(schedule, 0);
+      assert.ok(cmd.startsWith('["CCS","71","0"'));
+    });
+
+    it('contatore is always 71', () => {
+      const schedule = makeTestSchedule(1);
+      const cmd = buildCCSFromSchedule(schedule);
+      assert.ok(cmd.startsWith('["CCS","71"'));
+    });
+  });
+
+  describe('buildCCSDisableCommand', () => {
+    it('sets periodo to 0', () => {
+      const schedule = makeTestSchedule(2);
+      const cmd = buildCCSDisableCommand(schedule);
+      assert.ok(cmd.startsWith('["CCS","71","0"'));
+    });
+  });
+
+  describe('buildCCSEnableCommand', () => {
+    it('preserves original periodo', () => {
+      const schedule = makeTestSchedule(3);
+      const cmd = buildCCSEnableCommand(schedule);
+      assert.ok(cmd.startsWith('["CCS","71","3"'));
+    });
+  });
+
+  describe('CCG→CCS roundtrip', () => {
+    it('parse then rebuild produces equivalent command', () => {
+      const raw = buildTestCCGResponse(2);
+      const parsed = parseCCGResponse(raw);
+      assert.ok(parsed);
+      const rebuilt = buildCCSFromSchedule(parsed);
+      // Should be same as original but with CCS instead of CCG
+      const expected = raw.replace('"CCG"', '"CCS"');
+      assert.equal(rebuilt, expected);
     });
   });
 });

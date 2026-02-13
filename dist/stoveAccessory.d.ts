@@ -1,5 +1,5 @@
 import type { PlatformAccessory } from 'homebridge';
-import type { DeviceState } from './types.js';
+import type { DeviceState, CronoSchedule } from './types.js';
 import type { FourHeatPlatform } from './platform.js';
 export declare class StoveAccessory {
     private readonly platform;
@@ -9,6 +9,7 @@ export declare class StoveAccessory {
     private readonly thermostatService;
     private readonly defaultName;
     private readonly sensorServices;
+    private cronoSwitchService;
     private targetOverride;
     private targetOverrideExpiry;
     private switchDebounceTimer;
@@ -31,4 +32,9 @@ export declare class StoveAccessory {
     private getTargetTemperature;
     private setTargetTemperature;
     private getStatusFault;
+    private setupCronoSwitch;
+    private getCronoOn;
+    private setCronoOn;
+    updateCronoState(state: DeviceState, schedule: CronoSchedule | null): void;
+    private calculateNextEvent;
 }

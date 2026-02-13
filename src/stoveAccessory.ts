@@ -1,6 +1,6 @@
 import type { PlatformAccessory, CharacteristicValue, Service } from 'homebridge';
-import type { DeviceState, SensorMeta } from './types.js';
-import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_DEFINITIONS } from './types.js';
+import type { DeviceState, SensorMeta, CronoSchedule, CronoDaySchedule } from './types.js';
+import { PARAM_TEMP_SETPOINT, STATO, ERROR_CODES, SENSOR_DEFINITIONS, STATO_CRONO } from './types.js';
 import { applyPosPunto } from './protocol.js';
 import type { FourHeatPlatform } from './platform.js';
 import { DEFAULT_SWITCH_DEBOUNCE } from './settings.js';
@@ -21,6 +21,7 @@ export class StoveAccessory {
   private readonly thermostatService: Service;
   private readonly defaultName: string;
   private readonly sensorServices: Map<number, { service: Service; meta: SensorMeta }> = new Map();
+  private cronoSwitchService: Service | null = null;
   private targetOverride: number | null = null;
   private targetOverrideExpiry = 0;
   private switchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,6 +95,17 @@ export class StoveAccessory {
 
     // --- Sensor services ---
     this.setupSensorServices();
+
+    // --- Crono switch service ---
+    if (platform.config.cronoSwitch) {
+      this.setupCronoSwitch();
+    } else {
+      const staleSwitch = accessory.getServiceById(Service.Switch, 'crono-switch');
+      if (staleSwitch) {
+        accessory.removeService(staleSwitch);
+        platform.log.info('Removed disabled crono switch service');
+      }
+    }
   }
 
   private setupSensorServices() {
@@ -242,6 +254,12 @@ export class StoveAccessory {
       this.targetOverride ?? derivedTarget,
     );
 
+    // Update crono switch on/off state (name is updated separately via updateCronoState)
+    if (this.cronoSwitchService) {
+      const cronoOn = state.statoCrono !== STATO_CRONO.OFF && state.statoCrono !== 0;
+      this.cronoSwitchService.updateCharacteristic(Characteristic.On, cronoOn);
+    }
+
     // Update sensor services
     for (const [sensorId, { service, meta }] of this.sensorServices) {
       const sensor = state.sensors.get(sensorId);
@@ -377,5 +395,111 @@ export class StoveAccessory {
     return this.isInFaultState(stato)
       ? Characteristic.StatusFault.GENERAL_FAULT
       : Characteristic.StatusFault.NO_FAULT;
+  }
+
+  // --- Crono (schedule) switch ---
+
+  private setupCronoSwitch() {
+    const { Service, Characteristic } = this.platform;
+
+    let service = this.accessory.getServiceById(Service.Switch, 'crono-switch');
+    if (!service) {
+      service = this.accessory.addService(Service.Switch, 'Schedule', 'crono-switch');
+    }
+
+    service.getCharacteristic(Characteristic.On)
+      .onGet(() => this.getCronoOn())
+      .onSet((value) => this.setCronoOn(value));
+
+    this.thermostatService.addLinkedService(service);
+    this.cronoSwitchService = service;
+    this.platform.log.info('Crono switch service created');
+  }
+
+  private getCronoOn(): boolean {
+    const statoCrono = this.platform.deviceState?.statoCrono ?? STATO_CRONO.OFF;
+    return statoCrono !== STATO_CRONO.OFF && statoCrono !== 0;
+  }
+
+  private async setCronoOn(value: CharacteristicValue) {
+    const on = value as boolean;
+    let success: boolean;
+
+    if (on) {
+      this.platform.log.info('Enabling crono schedule');
+      success = await this.platform.enableCrono();
+    } else {
+      this.platform.log.info('Disabling crono schedule');
+      success = await this.platform.disableCrono();
+    }
+
+    if (!success) {
+      setTimeout(() => {
+        this.cronoSwitchService?.updateCharacteristic(
+          this.platform.Characteristic.On,
+          this.getCronoOn(),
+        );
+      }, 500);
+    }
+  }
+
+  updateCronoState(state: DeviceState, schedule: CronoSchedule | null) {
+    if (!this.cronoSwitchService) return;
+
+    const { Characteristic } = this.platform;
+    const cronoOn = state.statoCrono !== STATO_CRONO.OFF && state.statoCrono !== 0;
+
+    this.cronoSwitchService.updateCharacteristic(Characteristic.On, cronoOn);
+
+    if (cronoOn && schedule && schedule.periodo !== 0) {
+      const nextEvent = this.calculateNextEvent(schedule);
+      if (nextEvent) {
+        this.cronoSwitchService.updateCharacteristic(Characteristic.Name, `Crono: ${nextEvent}`);
+      } else {
+        this.cronoSwitchService.updateCharacteristic(Characteristic.Name, 'Schedule');
+      }
+    } else {
+      this.cronoSwitchService.updateCharacteristic(Characteristic.Name, 'Schedule');
+    }
+  }
+
+  private calculateNextEvent(schedule: CronoSchedule): string | null {
+    if (schedule.periodo === 0) return null;
+
+    const now = new Date();
+    const jsDay = now.getDay(); // 0=Sun, 1=Mon
+    const deviceDay = jsDay === 0 ? 7 : jsDay; // 1=Mon ... 7=Sun
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const currentTime = `${hh}:${mm}`;
+
+    const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    const getRelevantDay = (dayNum: number): CronoDaySchedule | undefined => {
+      if (schedule.periodo === 2) return schedule.days[0];
+      if (schedule.periodo === 3) return dayNum >= 6 ? schedule.days[5] : schedule.days[0];
+      return schedule.days[dayNum - 1];
+    };
+
+    for (let offset = 0; offset < 7; offset++) {
+      const checkDay = ((deviceDay - 1 + offset) % 7) + 1;
+      const daySchedule = getRelevantDay(checkDay);
+      if (!daySchedule) continue;
+
+      const enabledSlots = daySchedule.slots
+        .filter(s => s.enabled && s.start !== '00:00' && s.end !== '00:00')
+        .sort((a, b) => a.start.localeCompare(b.start));
+
+      for (const slot of enabledSlots) {
+        if (offset === 0) {
+          if (currentTime < slot.start) return `ON ${slot.start}`;
+          if (currentTime >= slot.start && currentTime < slot.end) return `OFF ${slot.end}`;
+        } else {
+          return `${DAY_LABELS[checkDay - 1]} ON ${slot.start}`;
+        }
+      }
+    }
+
+    return null;
   }
 }

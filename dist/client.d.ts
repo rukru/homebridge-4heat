@@ -5,6 +5,7 @@
  */
 import type { Logging } from 'homebridge';
 import type { DeviceState } from './types.js';
+import type { CronoSchedule } from './types.js';
 export interface FourHeatClientOptions {
     timeout?: number;
     connectDelay?: number;
@@ -32,4 +33,6 @@ export declare class FourHeatClient {
     turnOn(): Promise<boolean>;
     turnOff(): Promise<boolean>;
     resetError(): Promise<boolean>;
+    readSchedule(): Promise<CronoSchedule | null>;
+    writeSchedule(command: string): Promise<boolean>;
 }

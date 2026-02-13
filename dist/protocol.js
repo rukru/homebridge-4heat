@@ -133,6 +133,17 @@ export function build2WCCommand(originalHex, newValue) {
     const binaryStr = Array.from(buf).map(b => String.fromCharCode(b)).join('');
     return `["2WC","1","${binaryStr}"]`;
 }
+export function buildDirectCommand(hexPayload) {
+    const buf = Buffer.from(hexPayload, 'hex');
+    const binaryStr = Array.from(buf).map(b => String.fromCharCode(b)).join('');
+    return `["2WC","1","${binaryStr}"]`;
+}
+export function buildOnCommand() {
+    return buildDirectCommand('05040000');
+}
+export function buildOffCommand() {
+    return buildDirectCommand('05050000');
+}
 export function buildResetCommand() {
     return '["RST","0"]';
 }

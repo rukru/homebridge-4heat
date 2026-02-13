@@ -2,6 +2,15 @@ import { PARAM_ON_OFF, PARAM_TEMP_SETPOINT, STATO } from './types.js';
 export class StoveAccessory {
     platform;
     accessory;
+    static HEATING_STATES = new Set([
+        STATO.CHECK_UP,
+        STATO.IGNITION,
+        STATO.STABILISATION,
+        STATO.RETRY_IGNITION,
+        STATO.RUN_MODE,
+        STATO.MODULATION,
+        STATO.RECOVER_IGNITION,
+    ]);
     thermostatService;
     errorResetService;
     constructor(platform, accessory) {
@@ -57,7 +66,7 @@ export class StoveAccessory {
         const { Characteristic } = this.platform;
         this.thermostatService.updateCharacteristic(Characteristic.CurrentTemperature, state.tempPrinc);
         this.thermostatService.updateCharacteristic(Characteristic.CurrentHeatingCoolingState, this.mapCurrentState(state.stato));
-        this.thermostatService.updateCharacteristic(Characteristic.StatusFault, state.stato === STATO.ERROR
+        this.thermostatService.updateCharacteristic(Characteristic.StatusFault, this.isInFaultState(state.stato)
             ? Characteristic.StatusFault.GENERAL_FAULT
             : Characteristic.StatusFault.NO_FAULT);
         const setpointParam = state.parameters.get(PARAM_TEMP_SETPOINT);
@@ -73,10 +82,13 @@ export class StoveAccessory {
     }
     mapCurrentState(stato) {
         const { Characteristic } = this.platform;
-        if (stato >= STATO.IGNITION_1 && stato <= STATO.RUNNING) {
+        if (StoveAccessory.HEATING_STATES.has(stato)) {
             return Characteristic.CurrentHeatingCoolingState.HEAT;
         }
         return Characteristic.CurrentHeatingCoolingState.OFF;
+    }
+    isInFaultState(stato) {
+        return stato === STATO.BLOCK || stato === STATO.SAFETY_MODE;
     }
     getCurrentHeatingState() {
         const stato = this.platform.deviceState?.stato ?? 0;
@@ -92,9 +104,14 @@ export class StoveAccessory {
     }
     async setTargetHeatingState(value) {
         const { Characteristic } = this.platform;
-        const onOff = value === Characteristic.TargetHeatingCoolingState.HEAT ? 1 : 0;
-        this.platform.log.info('Setting stove %s', onOff ? 'ON' : 'OFF');
-        await this.platform.writeParameter(PARAM_ON_OFF, onOff);
+        if (value === Characteristic.TargetHeatingCoolingState.HEAT) {
+            this.platform.log.info('Turning stove ON');
+            await this.platform.turnOn();
+        }
+        else {
+            this.platform.log.info('Turning stove OFF');
+            await this.platform.turnOff();
+        }
     }
     getCurrentTemperature() {
         return this.platform.deviceState?.tempPrinc ?? 0;
@@ -111,7 +128,7 @@ export class StoveAccessory {
     getStatusFault() {
         const { Characteristic } = this.platform;
         const stato = this.platform.deviceState?.stato ?? 0;
-        return stato === STATO.ERROR
+        return this.isInFaultState(stato)
             ? Characteristic.StatusFault.GENERAL_FAULT
             : Characteristic.StatusFault.NO_FAULT;
     }

@@ -22,6 +22,8 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private poll;
     private handlePollFailure;
     writeParameter(paramId: number, value: number): Promise<boolean>;
+    turnOn(): Promise<boolean>;
+    turnOff(): Promise<boolean>;
     resetError(): Promise<boolean>;
     get minTemp(): number;
     get maxTemp(): number;

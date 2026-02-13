@@ -5,7 +5,7 @@
  */
 import net from 'node:net';
 import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
-import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, applyPosPunto } from './protocol.js';
+import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto } from './protocol.js';
 import { wakeAndDiscover } from './udp.js';
 export class FourHeatClient {
     log;
@@ -112,6 +112,7 @@ export class FourHeatClient {
             tempSec: 0,
             posPunto: 0,
             parameters: new Map(),
+            sensors: new Map(),
             lastUpdate: new Date(),
         };
         for (const h of hexValues) {
@@ -139,12 +140,29 @@ export class FourHeatClient {
                 };
                 state.parameters.set(parsed.id, param);
             }
+            else if (parsed.type === 'sensor') {
+                const sensor = {
+                    id: parsed.id,
+                    valore: parsed.valore,
+                    min: parsed.min,
+                    max: parsed.max,
+                };
+                state.sensors.set(parsed.id, sensor);
+            }
         }
         return state;
     }
     async writeParameter(originalHex, newValue) {
         const cmd = build2WCCommand(originalHex, newValue);
         const resp = await this.enqueue(cmd);
+        return resp !== null;
+    }
+    async turnOn() {
+        const resp = await this.enqueue(buildOnCommand());
+        return resp !== null;
+    }
+    async turnOff() {
+        const resp = await this.enqueue(buildOffCommand());
         return resp !== null;
     }
     async resetError() {

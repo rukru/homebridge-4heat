@@ -22,5 +22,7 @@ export declare class FourHeatClient {
     private processQueue;
     readStatus(): Promise<DeviceState | null>;
     writeParameter(originalHex: string, newValue: number): Promise<boolean>;
+    turnOn(): Promise<boolean>;
+    turnOff(): Promise<boolean>;
     resetError(): Promise<boolean>;
 }

@@ -69,5 +69,8 @@ export declare function applyPosPunto(raw: number, posPunto: number): number;
 export declare function parse2WLResponse(raw: string): string[] | null;
 export declare function parseHexDatapoint(h: string): ParsedDatapoint;
 export declare function build2WCCommand(originalHex: string, newValue: number): string;
+export declare function buildDirectCommand(hexPayload: string): string;
+export declare function buildOnCommand(): string;
+export declare function buildOffCommand(): string;
 export declare function buildResetCommand(): string;
 export declare function buildStatusCommand(): string;

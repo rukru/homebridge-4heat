@@ -6,9 +6,9 @@
 
 import net from 'node:net';
 import type { Logging } from 'homebridge';
-import type { DeviceState, ParameterValue } from './types.js';
+import type { DeviceState, ParameterValue, SensorValue } from './types.js';
 import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
-import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, applyPosPunto } from './protocol.js';
+import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, buildOnCommand, buildOffCommand, applyPosPunto } from './protocol.js';
 import { wakeAndDiscover } from './udp.js';
 
 export class FourHeatClient {
@@ -124,6 +124,7 @@ export class FourHeatClient {
       tempSec: 0,
       posPunto: 0,
       parameters: new Map(),
+      sensors: new Map(),
       lastUpdate: new Date(),
     };
 
@@ -151,6 +152,14 @@ export class FourHeatClient {
           maxValue: applyPosPunto(parsed.max, pp),
         };
         state.parameters.set(parsed.id, param);
+      } else if (parsed.type === 'sensor') {
+        const sensor: SensorValue = {
+          id: parsed.id,
+          valore: parsed.valore,
+          min: parsed.min,
+          max: parsed.max,
+        };
+        state.sensors.set(parsed.id, sensor);
       }
     }
 
@@ -160,6 +169,16 @@ export class FourHeatClient {
   async writeParameter(originalHex: string, newValue: number): Promise<boolean> {
     const cmd = build2WCCommand(originalHex, newValue);
     const resp = await this.enqueue(cmd);
+    return resp !== null;
+  }
+
+  async turnOn(): Promise<boolean> {
+    const resp = await this.enqueue(buildOnCommand());
+    return resp !== null;
+  }
+
+  async turnOff(): Promise<boolean> {
+    const resp = await this.enqueue(buildOffCommand());
     return resp !== null;
   }
 

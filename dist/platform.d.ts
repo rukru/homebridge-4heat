@@ -1,0 +1,28 @@
+import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, Service, Characteristic } from 'homebridge';
+import type { FourHeatConfig, DeviceState } from './types.js';
+import { FourHeatClient } from './client.js';
+export declare class FourHeatPlatform implements DynamicPlatformPlugin {
+    readonly log: Logging;
+    readonly api: API;
+    readonly Service: typeof Service;
+    readonly Characteristic: typeof Characteristic;
+    readonly config: FourHeatConfig;
+    client: FourHeatClient;
+    deviceState: DeviceState | null;
+    private readonly cachedAccessories;
+    private stoveAccessory;
+    private pollingTimer;
+    private consecutiveFailures;
+    private backoffTimer;
+    constructor(log: Logging, config: FourHeatConfig, api: API);
+    configureAccessory(accessory: PlatformAccessory): void;
+    private didFinishLaunching;
+    private registerAccessory;
+    private startPolling;
+    private poll;
+    private handlePollFailure;
+    writeParameter(paramId: number, value: number): Promise<boolean>;
+    resetError(): Promise<boolean>;
+    get minTemp(): number;
+    get maxTemp(): number;
+}

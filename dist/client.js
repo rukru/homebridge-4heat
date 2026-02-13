@@ -1,0 +1,158 @@
+/**
+ * TCP client for 4HEAT PinKEY device.
+ * Each request: UDP wake-up → TCP connect → 500ms delay → send → recv → close.
+ * Serialized via promise queue — device cannot handle concurrent connections.
+ */
+import net from 'node:net';
+import { DEFAULT_TIMEOUT, DEFAULT_CONNECT_DELAY } from './settings.js';
+import { parse2WLResponse, parseHexDatapoint, build2WCCommand, buildResetCommand, buildStatusCommand, applyPosPunto } from './protocol.js';
+import { wakeAndDiscover } from './udp.js';
+export class FourHeatClient {
+    log;
+    host;
+    port;
+    timeout;
+    connectDelay;
+    busy = false;
+    queue = [];
+    constructor(log, host, port, timeout = DEFAULT_TIMEOUT, connectDelay = DEFAULT_CONNECT_DELAY) {
+        this.log = log;
+        this.host = host;
+        this.port = port;
+        this.timeout = timeout;
+        this.connectDelay = connectDelay;
+    }
+    get currentHost() {
+        return this.host;
+    }
+    sendTcp(cmd, host) {
+        return new Promise((resolve) => {
+            const socket = new net.Socket();
+            let data = '';
+            let resolved = false;
+            const finish = (result) => {
+                if (resolved)
+                    return;
+                resolved = true;
+                socket.destroy();
+                resolve(result);
+            };
+            socket.setTimeout(this.timeout);
+            socket.on('data', (chunk) => {
+                data += chunk.toString('utf-8');
+            });
+            socket.on('end', () => finish(data || null));
+            socket.on('close', () => finish(data || null));
+            socket.on('timeout', () => finish(null));
+            socket.on('error', (err) => {
+                this.log.debug('TCP error: %s', err.message);
+                finish(null);
+            });
+            socket.connect(this.port, host, () => {
+                setTimeout(() => {
+                    if (!resolved) {
+                        socket.write(cmd, 'utf-8');
+                    }
+                }, this.connectDelay);
+            });
+        });
+    }
+    async wakeAndResolveHost() {
+        const device = await wakeAndDiscover();
+        if (device) {
+            if (!this.host) {
+                this.host = device.ip;
+            }
+            return this.host ?? device.ip;
+        }
+        return this.host ?? null;
+    }
+    async executeCommand(cmd) {
+        const host = await this.wakeAndResolveHost();
+        if (!host) {
+            this.log.warn('No device found via UDP discovery and no host configured');
+            return null;
+        }
+        return this.sendTcp(cmd, host);
+    }
+    enqueue(cmd) {
+        return new Promise((resolve) => {
+            this.queue.push({ cmd, resolve });
+            this.processQueue();
+        });
+    }
+    async processQueue() {
+        if (this.busy || this.queue.length === 0)
+            return;
+        this.busy = true;
+        const item = this.queue.shift();
+        try {
+            const result = await this.executeCommand(item.cmd);
+            item.resolve(result);
+        }
+        catch {
+            item.resolve(null);
+        }
+        finally {
+            this.busy = false;
+            this.processQueue();
+        }
+    }
+    async readStatus() {
+        const raw = await this.enqueue(buildStatusCommand());
+        if (!raw)
+            return null;
+        const hexValues = parse2WLResponse(raw);
+        if (!hexValues)
+            return null;
+        const state = {
+            stato: 0,
+            errore: 0,
+            tempPrinc: 0,
+            tempSec: 0,
+            posPunto: 0,
+            parameters: new Map(),
+            lastUpdate: new Date(),
+        };
+        for (const h of hexValues) {
+            const parsed = parseHexDatapoint(h);
+            if (parsed.type === 'main_values') {
+                state.stato = parsed.stato;
+                state.errore = parsed.errore;
+                state.posPunto = parsed.posPunto;
+                state.tempPrinc = applyPosPunto(parsed.tempPrinc, parsed.posPunto);
+                state.tempSec = applyPosPunto(parsed.tempSec, parsed.posPunto);
+            }
+            else if (parsed.type === 'parameter' && !parsed.readOnly) {
+                const pp = parsed.posPunto;
+                const param = {
+                    id: parsed.id,
+                    valore: parsed.valore,
+                    min: parsed.min,
+                    max: parsed.max,
+                    readOnly: parsed.readOnly,
+                    posPunto: pp,
+                    originalHex: h,
+                    value: applyPosPunto(parsed.valore, pp),
+                    minValue: applyPosPunto(parsed.min, pp),
+                    maxValue: applyPosPunto(parsed.max, pp),
+                };
+                state.parameters.set(parsed.id, param);
+            }
+        }
+        return state;
+    }
+    async writeParameter(originalHex, newValue) {
+        const cmd = build2WCCommand(originalHex, newValue);
+        const resp = await this.enqueue(cmd);
+        return resp !== null;
+    }
+    async resetError() {
+        const resp = await this.enqueue(buildResetCommand());
+        if (resp && resp.includes('"OK"')) {
+            return true;
+        }
+        return resp !== null;
+    }
+}
+//# sourceMappingURL=client.js.map

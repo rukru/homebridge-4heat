@@ -1,0 +1,12 @@
+export declare const PLATFORM_NAME = "FourHeat4Way";
+export declare const PLUGIN_NAME = "homebridge-4heat";
+export declare const DEFAULT_PORT = 80;
+export declare const DEFAULT_POLLING_INTERVAL = 30;
+export declare const DEFAULT_TIMEOUT = 5000;
+export declare const DEFAULT_CONNECT_DELAY = 500;
+export declare const DEFAULT_MIN_TEMP = 30;
+export declare const DEFAULT_MAX_TEMP = 75;
+export declare const UDP_BROADCAST_PORT = 6666;
+export declare const UDP_LISTEN_PORT = 5555;
+export declare const UDP_TIMEOUT = 3000;
+export declare const UDP_MAX_RETRIES = 3;

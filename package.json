@@ -1,0 +1,32 @@
+{
+  "name": "homebridge-4heat",
+  "displayName": "4HEAT PinKEY",
+  "version": "1.0.0",
+  "description": "Homebridge plugin for 4HEAT PinKEY in box pellet stove controller (2ways protocol)",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "engines": {
+    "node": "^20.18.0 || ^22.10.0",
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "4heat",
+    "pellet-stove",
+    "pinkey"
+  ],
+  "scripts": {
+    "build": "rimraf ./dist && tsc",
+    "watch": "npm run build && npm link && nodemon",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "homebridge": "^2.0.0-beta.55",
+    "nodemon": "^3.1.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

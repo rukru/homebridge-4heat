@@ -15,9 +15,13 @@ export class StoveAccessory {
     STATO.RECOVER_IGNITION,
   ]);
 
+  private static readonly TARGET_OVERRIDE_TTL = 60_000; // 60s
+
   private readonly thermostatService: Service;
   private readonly defaultName: string;
   private roomTempService: Service | null = null;
+  private targetOverride: number | null = null;
+  private targetOverrideExpiry = 0;
 
   constructor(
     private readonly platform: FourHeatPlatform,
@@ -121,11 +125,19 @@ export class StoveAccessory {
       );
     }
 
+    const derivedTarget = this.isActiveState(state.stato)
+      ? Characteristic.TargetHeatingCoolingState.HEAT
+      : Characteristic.TargetHeatingCoolingState.OFF;
+
+    if (this.targetOverride !== null) {
+      if (derivedTarget === this.targetOverride || Date.now() > this.targetOverrideExpiry) {
+        this.targetOverride = null;
+      }
+    }
+
     this.thermostatService.updateCharacteristic(
       Characteristic.TargetHeatingCoolingState,
-      this.isActiveState(state.stato)
-        ? Characteristic.TargetHeatingCoolingState.HEAT
-        : Characteristic.TargetHeatingCoolingState.OFF,
+      this.targetOverride ?? derivedTarget,
     );
 
     // Room temperature sensor (created dynamically on first data)
@@ -184,6 +196,9 @@ export class StoveAccessory {
 
   private getTargetHeatingState(): number {
     const { Characteristic } = this.platform;
+    if (this.targetOverride !== null && Date.now() <= this.targetOverrideExpiry) {
+      return this.targetOverride;
+    }
     const stato = this.platform.deviceState?.stato ?? 0;
     return this.isActiveState(stato)
       ? Characteristic.TargetHeatingCoolingState.HEAT
@@ -192,7 +207,11 @@ export class StoveAccessory {
 
   private async setTargetHeatingState(value: CharacteristicValue) {
     const { Characteristic } = this.platform;
-    if (value === Characteristic.TargetHeatingCoolingState.HEAT) {
+    const target = value as number;
+    this.targetOverride = target;
+    this.targetOverrideExpiry = Date.now() + StoveAccessory.TARGET_OVERRIDE_TTL;
+
+    if (target === Characteristic.TargetHeatingCoolingState.HEAT) {
       this.platform.log.info('Turning stove ON');
       await this.platform.turnOn();
     } else {

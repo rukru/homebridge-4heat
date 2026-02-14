@@ -11,6 +11,7 @@ export declare class StoveAccessory {
     private readonly sensorServices;
     private cronoSwitchService;
     private cronoDefaultName;
+    private alertSensorService;
     private targetOverride;
     private targetOverrideExpiry;
     private switchDebounceTimer;
@@ -33,6 +34,8 @@ export declare class StoveAccessory {
     private getTargetTemperature;
     private setTargetTemperature;
     private getStatusFault;
+    private setupAlertSensor;
+    private getSmokeDetected;
     private setupCronoSwitch;
     private getCronoOn;
     private setCronoOn;

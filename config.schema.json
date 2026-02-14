@@ -76,6 +76,12 @@
         "description": "Display name for the crono switch in Apple Home",
         "condition": { "functionBody": "return model.cronoSwitch === true;" }
       },
+      "alertSensor": {
+        "title": "Alert Sensor (SmokeSensor)",
+        "type": "boolean",
+        "default": false,
+        "description": "Show a smoke sensor in HomeKit that triggers on critical stove errors (Block, Safety Mode). Sends push notifications to your iPhone."
+      },
       "sensors": {
         "title": "Sensors",
         "type": "object",
@@ -154,7 +160,7 @@
     {
       "type": "fieldset",
       "title": "Thermostat",
-      "items": ["minTemp", "maxTemp", "switchDebounce", "cronoSwitch", "cronoName"]
+      "items": ["minTemp", "maxTemp", "switchDebounce", "cronoSwitch", "cronoName", "alertSensor"]
     },
     {
       "type": "fieldset",

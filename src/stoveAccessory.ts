@@ -23,6 +23,7 @@ export class StoveAccessory {
   private readonly sensorServices: Map<number, { service: Service; meta: SensorMeta }> = new Map();
   private cronoSwitchService: Service | null = null;
   private cronoDefaultName = 'Schedule';
+  private alertSensorService: Service | null = null;
   private targetOverride: number | null = null;
   private targetOverrideExpiry = 0;
   private switchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -105,6 +106,17 @@ export class StoveAccessory {
       if (staleSwitch) {
         accessory.removeService(staleSwitch);
         platform.log.info('Removed disabled crono switch service');
+      }
+    }
+
+    // --- Alert sensor (SmokeSensor) ---
+    if (platform.config.alertSensor) {
+      this.setupAlertSensor();
+    } else {
+      const staleSensor = accessory.getServiceById(Service.SmokeSensor, 'alert-sensor');
+      if (staleSensor) {
+        accessory.removeService(staleSensor);
+        platform.log.info('Removed disabled alert sensor service');
       }
     }
   }
@@ -255,6 +267,29 @@ export class StoveAccessory {
       this.targetOverride ?? derivedTarget,
     );
 
+    // Update alert sensor
+    if (this.alertSensorService) {
+      const smokeDetected = this.isInFaultState(state.stato)
+        ? Characteristic.SmokeDetected.SMOKE_DETECTED
+        : Characteristic.SmokeDetected.SMOKE_NOT_DETECTED;
+      this.alertSensorService.updateCharacteristic(Characteristic.SmokeDetected, smokeDetected);
+      this.alertSensorService.updateCharacteristic(
+        Characteristic.StatusFault,
+        this.isInFaultState(state.stato)
+          ? Characteristic.StatusFault.GENERAL_FAULT
+          : Characteristic.StatusFault.NO_FAULT,
+      );
+      if (this.isInFaultState(state.stato) && state.errore > 0) {
+        const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown';
+        this.alertSensorService.updateCharacteristic(
+          Characteristic.Name,
+          `Error ${state.errore}: ${errorDesc}`,
+        );
+      } else {
+        this.alertSensorService.updateCharacteristic(Characteristic.Name, 'Stove Alert');
+      }
+    }
+
     // Update crono switch on/off state (name is updated separately via updateCronoState)
     if (this.cronoSwitchService) {
       const cronoOn = state.statoCrono !== STATO_CRONO.OFF && state.statoCrono !== 0;
@@ -396,6 +431,36 @@ export class StoveAccessory {
     return this.isInFaultState(stato)
       ? Characteristic.StatusFault.GENERAL_FAULT
       : Characteristic.StatusFault.NO_FAULT;
+  }
+
+  // --- Alert sensor (SmokeSensor) ---
+
+  private setupAlertSensor() {
+    const { Service, Characteristic } = this.platform;
+
+    let service = this.accessory.getServiceById(Service.SmokeSensor, 'alert-sensor');
+    if (!service) {
+      service = this.accessory.addService(Service.SmokeSensor, 'Stove Alert', 'alert-sensor');
+    }
+
+    service.getCharacteristic(Characteristic.SmokeDetected)
+      .onGet(() => this.getSmokeDetected());
+
+    service.addOptionalCharacteristic(Characteristic.StatusFault);
+    service.getCharacteristic(Characteristic.StatusFault)
+      .onGet(() => this.getStatusFault());
+
+    this.thermostatService.addLinkedService(service);
+    this.alertSensorService = service;
+    this.platform.log.info('Alert sensor service created');
+  }
+
+  private getSmokeDetected(): number {
+    const { Characteristic } = this.platform;
+    const stato = this.platform.deviceState?.stato ?? 0;
+    return this.isInFaultState(stato)
+      ? Characteristic.SmokeDetected.SMOKE_DETECTED
+      : Characteristic.SmokeDetected.SMOKE_NOT_DETECTED;
   }
 
   // --- Crono (schedule) switch ---

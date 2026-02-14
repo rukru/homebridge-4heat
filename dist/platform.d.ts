@@ -23,7 +23,10 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     configureAccessory(accessory: PlatformAccessory): void;
     private didFinishLaunching;
     private registerAccessory;
+    private get pollingIntervalMs();
     private startPolling;
+    private scheduleRetry;
+    private stopTimers;
     private poll;
     private handlePollFailure;
     writeParameter(paramId: number, value: number): Promise<boolean>;

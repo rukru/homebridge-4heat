@@ -14,6 +14,9 @@ export class StoveAccessory {
         STATO.RECOVER_IGNITION,
     ]);
     static TARGET_OVERRIDE_TTL = 60_000; // 60s
+    static isCronoOn(statoCrono) {
+        return statoCrono !== STATO_CRONO.OFF && statoCrono !== 0;
+    }
     thermostatService;
     defaultName;
     sensorServices = new Map();
@@ -150,8 +153,27 @@ export class StoveAccessory {
             case 'TemperatureSensor': return Service.TemperatureSensor;
             case 'HumiditySensor': return Service.HumiditySensor;
             case 'LightSensor': return Service.LightSensor;
-            default: return Service.TemperatureSensor;
         }
+    }
+    static computeSensorDisplayValue(meta, sensor, posPunto) {
+        const raw = sensor.valore;
+        if (meta.serviceType === 'TemperatureSensor')
+            return applyPosPunto(raw, posPunto);
+        if (meta.serviceType === 'HumiditySensor') {
+            const range = sensor.max - sensor.min;
+            if (range <= 0)
+                return 0;
+            return Math.max(0, Math.min(100, ((raw - sensor.min) / range) * 100));
+        }
+        if (meta.serviceType === 'LightSensor')
+            return Math.max(0.0001, raw);
+        return raw;
+    }
+    static faultName(errore) {
+        if (errore <= 0)
+            return null;
+        const desc = ERROR_CODES[errore] ?? 'Unknown';
+        return `Error ${errore}: ${desc}`;
     }
     getSensorValue(meta) {
         const state = this.platform.deviceState;
@@ -159,21 +181,7 @@ export class StoveAccessory {
         if (!sensor || !state) {
             return meta.serviceType === 'LightSensor' ? 0.0001 : 0;
         }
-        const raw = sensor.valore;
-        if (meta.serviceType === 'TemperatureSensor') {
-            return applyPosPunto(raw, state.posPunto);
-        }
-        if (meta.serviceType === 'HumiditySensor') {
-            const range = sensor.max - sensor.min;
-            if (range <= 0)
-                return 0;
-            const pct = ((raw - sensor.min) / range) * 100;
-            return Math.max(0, Math.min(100, pct));
-        }
-        if (meta.serviceType === 'LightSensor') {
-            return Math.max(0.0001, raw);
-        }
-        return raw;
+        return StoveAccessory.computeSensorDisplayValue(meta, sensor, state.posPunto);
     }
     updateState(state) {
         const { Characteristic } = this.platform;
@@ -183,13 +191,8 @@ export class StoveAccessory {
             ? Characteristic.StatusFault.GENERAL_FAULT
             : Characteristic.StatusFault.NO_FAULT);
         // Update name to show error info or restore default
-        if (this.isInFaultState(state.stato) && state.errore > 0) {
-            const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown';
-            this.thermostatService.updateCharacteristic(Characteristic.Name, `Error ${state.errore}: ${errorDesc}`);
-        }
-        else {
-            this.thermostatService.updateCharacteristic(Characteristic.Name, this.defaultName);
-        }
+        const faultLabel = this.isInFaultState(state.stato) ? StoveAccessory.faultName(state.errore) : null;
+        this.thermostatService.updateCharacteristic(Characteristic.Name, faultLabel ?? this.defaultName);
         const setpointParam = state.parameters.get(PARAM_TEMP_SETPOINT);
         if (setpointParam) {
             this.thermostatService.updateCharacteristic(Characteristic.TargetTemperature, setpointParam.value);
@@ -212,36 +215,22 @@ export class StoveAccessory {
             this.alertSensorService.updateCharacteristic(Characteristic.StatusFault, this.isInFaultState(state.stato)
                 ? Characteristic.StatusFault.GENERAL_FAULT
                 : Characteristic.StatusFault.NO_FAULT);
-            if (this.isInFaultState(state.stato) && state.errore > 0) {
-                const errorDesc = ERROR_CODES[state.errore] ?? 'Unknown';
-                this.alertSensorService.updateCharacteristic(Characteristic.Name, `Error ${state.errore}: ${errorDesc}`);
-            }
-            else {
-                this.alertSensorService.updateCharacteristic(Characteristic.Name, 'Stove Alert');
-            }
+            this.alertSensorService.updateCharacteristic(Characteristic.Name, faultLabel ?? 'Stove Alert');
         }
         // Update crono switch on/off state (name is updated separately via updateCronoState)
         if (this.cronoSwitchService) {
-            const cronoOn = state.statoCrono !== STATO_CRONO.OFF && state.statoCrono !== 0;
-            this.cronoSwitchService.updateCharacteristic(Characteristic.On, cronoOn);
+            this.cronoSwitchService.updateCharacteristic(Characteristic.On, StoveAccessory.isCronoOn(state.statoCrono));
         }
         // Update sensor services
         for (const [sensorId, { service, meta }] of this.sensorServices) {
             const sensor = state.sensors.get(sensorId);
             if (!sensor)
                 continue;
-            if (meta.serviceType === 'TemperatureSensor') {
-                const temp = applyPosPunto(sensor.valore, state.posPunto);
-                service.updateCharacteristic(Characteristic.CurrentTemperature, temp);
-            }
-            else if (meta.serviceType === 'HumiditySensor') {
-                const range = sensor.max - sensor.min;
-                const pct = range > 0 ? ((sensor.valore - sensor.min) / range) * 100 : 0;
-                service.updateCharacteristic(Characteristic.CurrentRelativeHumidity, Math.max(0, Math.min(100, pct)));
-            }
-            else if (meta.serviceType === 'LightSensor') {
-                service.updateCharacteristic(Characteristic.CurrentAmbientLightLevel, Math.max(0.0001, sensor.valore));
-            }
+            const value = StoveAccessory.computeSensorDisplayValue(meta, sensor, state.posPunto);
+            const char = meta.serviceType === 'HumiditySensor' ? Characteristic.CurrentRelativeHumidity
+                : meta.serviceType === 'LightSensor' ? Characteristic.CurrentAmbientLightLevel
+                    : Characteristic.CurrentTemperature;
+            service.updateCharacteristic(char, value);
         }
     }
     mapCurrentState(stato) {
@@ -379,8 +368,7 @@ export class StoveAccessory {
         this.platform.log.info('Crono switch service created: %s', cronoName);
     }
     getCronoOn() {
-        const statoCrono = this.platform.deviceState?.statoCrono ?? STATO_CRONO.OFF;
-        return statoCrono !== STATO_CRONO.OFF && statoCrono !== 0;
+        return StoveAccessory.isCronoOn(this.platform.deviceState?.statoCrono ?? STATO_CRONO.OFF);
     }
     async setCronoOn(value) {
         const on = value;
@@ -403,7 +391,7 @@ export class StoveAccessory {
         if (!this.cronoSwitchService)
             return;
         const { Characteristic } = this.platform;
-        const cronoOn = state.statoCrono !== STATO_CRONO.OFF && state.statoCrono !== 0;
+        const cronoOn = StoveAccessory.isCronoOn(state.statoCrono);
         this.cronoSwitchService.updateCharacteristic(Characteristic.On, cronoOn);
         if (cronoOn && schedule && schedule.periodo !== 0) {
             const nextEvent = this.calculateNextEvent(schedule);

@@ -5,6 +5,24 @@
 
 import type { CronoSchedule, CronoTimeSlot, CronoDaySchedule } from './types.js';
 
+/**
+ * Parse a JSON-like string array from the 4HEAT protocol, e.g. '["2WL","3","AA"]' → ["2WL","3","AA"].
+ * Returns null if the string does not start with the expected prefix.
+ */
+export function parseProtocolArray(raw: string, expectedPrefix: string): string[] | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith(`["${expectedPrefix}"`)) return null;
+  try {
+    const inner = trimmed.slice(1, -1);
+    const parts = inner.split('","');
+    parts[0] = parts[0].replace(/^"/, '');
+    parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
+    return parts;
+  } catch {
+    return null;
+  }
+}
+
 export type ParsedDatapoint =
   | { type: 'main_values'; tempSec: number; stato: number; errore: number; tempPrinc: number; posPunto: number }
   | { type: 'state_info'; statoCrono: number; potenza: string; lingua: number; ricetta: number; rs485Addr: number; termostato?: number; posPunto?: number }
@@ -27,14 +45,8 @@ export function applyPosPunto(raw: number, posPunto: number): number {
 }
 
 export function parse2WLResponse(raw: string): string[] | null {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith('["2WL"')) {
-    return null;
-  }
-  const inner = trimmed.slice(1, -1); // remove [ ]
-  const parts = inner.split('","');
-  parts[0] = parts[0].replace(/^"/, '');
-  parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
+  const parts = parseProtocolArray(raw, '2WL');
+  if (!parts) return null;
   // parts[0]="2WL", parts[1]=count, parts[2:]=hex values
   return parts.slice(2);
 }
@@ -195,17 +207,9 @@ export function buildCCGCommand(): string {
 }
 
 export function parseCCGResponse(raw: string): CronoSchedule | null {
-  const trimmed = raw.trim();
-  if (!trimmed.startsWith('["CCG"')) return null;
-
-  const inner = trimmed.slice(1, -1);
-  const parts = inner.split('","');
-  parts[0] = parts[0].replace(/^"/, '');
-  parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
-
-  // parts: ["CCG", "71", "<periodo>", "1", "HH:MM", "HH:MM", "0|1", ...]
+  const parts = parseProtocolArray(raw, 'CCG');
   // Minimum: 3 header + 7 days × 10 fields = 73
-  if (parts.length < 73) return null;
+  if (!parts || parts.length < 73) return null;
 
   const periodo = parseInt(parts[2], 10);
   const days: CronoDaySchedule[] = [];
@@ -226,7 +230,7 @@ export function parseCCGResponse(raw: string): CronoSchedule | null {
     days.push({ dayNumber, slots });
   }
 
-  return { periodo, days, rawResponse: trimmed };
+  return { periodo, days, rawResponse: raw.trim() };
 }
 
 export function buildCCSFromSchedule(schedule: CronoSchedule, newPeriodo?: number): string {

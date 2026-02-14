@@ -6,6 +6,7 @@ export declare class StoveAccessory {
     private readonly accessory;
     private static readonly HEATING_STATES;
     private static readonly TARGET_OVERRIDE_TTL;
+    private static isCronoOn;
     private readonly thermostatService;
     private readonly defaultName;
     private readonly sensorServices;
@@ -20,6 +21,8 @@ export declare class StoveAccessory {
     private setupSensorServices;
     private createSensorService;
     private getHAPServiceType;
+    private static computeSensorDisplayValue;
+    private static faultName;
     private getSensorValue;
     updateState(state: DeviceState): void;
     private mapCurrentState;

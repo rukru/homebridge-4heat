@@ -3,6 +3,11 @@
  * Ported from 4heat_control.py
  */
 import type { CronoSchedule } from './types.js';
+/**
+ * Parse a JSON-like string array from the 4HEAT protocol, e.g. '["2WL","3","AA"]' → ["2WL","3","AA"].
+ * Returns null if the string does not start with the expected prefix.
+ */
+export declare function parseProtocolArray(raw: string, expectedPrefix: string): string[] | null;
 export type ParsedDatapoint = {
     type: 'main_values';
     tempSec: number;

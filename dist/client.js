@@ -144,10 +144,6 @@ export class FourHeatClient {
                 const pp = parsed.posPunto;
                 const param = {
                     id: parsed.id,
-                    valore: parsed.valore,
-                    min: parsed.min,
-                    max: parsed.max,
-                    readOnly: parsed.readOnly,
                     posPunto: pp,
                     originalHex: h,
                     value: applyPosPunto(parsed.valore, pp),
@@ -186,9 +182,6 @@ export class FourHeatClient {
     }
     async resetError() {
         const resp = await this.enqueue(buildResetCommand());
-        if (resp && resp.includes('"OK"')) {
-            return true;
-        }
         return resp !== null;
     }
     async readSchedule() {

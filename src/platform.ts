@@ -122,10 +122,23 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     }
   }
 
+  private get pollingIntervalMs(): number {
+    return (this.config.pollingInterval ?? DEFAULT_POLLING_INTERVAL) * 1000;
+  }
+
   private startPolling() {
-    const interval = (this.config.pollingInterval ?? DEFAULT_POLLING_INTERVAL) * 1000;
     this.poll();
-    this.pollingTimer = setInterval(() => this.poll(), interval);
+    this.pollingTimer = setInterval(() => this.poll(), this.pollingIntervalMs);
+  }
+
+  private scheduleRetry(delayMs: number) {
+    if (this.backoffTimer) clearTimeout(this.backoffTimer);
+    this.backoffTimer = setTimeout(() => this.poll(), delayMs);
+  }
+
+  private stopTimers() {
+    if (this.pollingTimer) { clearInterval(this.pollingTimer); this.pollingTimer = null; }
+    if (this.backoffTimer) { clearTimeout(this.backoffTimer); this.backoffTimer = null; }
   }
 
   private async poll() {
@@ -134,6 +147,9 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
       if (state) {
         if (this.consecutiveFailures > 0) {
           this.log.info('Connection restored after %d failures', this.consecutiveFailures);
+          // Restore regular interval after backoff recovery
+          this.stopTimers();
+          this.pollingTimer = setInterval(() => this.poll(), this.pollingIntervalMs);
         }
         this.consecutiveFailures = 0;
         this.deviceState = state;
@@ -186,9 +202,9 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     const backoffSeconds = BACKOFF_STEPS[backoffIndex];
     this.log.warn('Poll failed (%d consecutive). Next retry in %ds.', this.consecutiveFailures, backoffSeconds);
 
-    // Schedule an extra retry with backoff (in addition to the regular interval)
-    if (this.backoffTimer) clearTimeout(this.backoffTimer);
-    this.backoffTimer = setTimeout(() => this.poll(), backoffSeconds * 1000);
+    // Pause regular polling and switch to backoff-only retries
+    this.stopTimers();
+    this.scheduleRetry(backoffSeconds * 1000);
   }
 
   async writeParameter(paramId: number, value: number): Promise<boolean> {

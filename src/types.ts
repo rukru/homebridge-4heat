@@ -47,10 +47,6 @@ export interface DeviceState {
 
 export interface ParameterValue {
   id: number;
-  valore: number;
-  min: number;
-  max: number;
-  readOnly: boolean;
   posPunto: number;
   originalHex: string;
   value: number;

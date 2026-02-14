@@ -7,33 +7,13 @@
 import dgram from 'node:dgram';
 import type { DiscoveredDevice } from './types.js';
 import { UDP_BROADCAST_PORT, UDP_LISTEN_PORT, UDP_TIMEOUT, UDP_MAX_RETRIES } from './settings.js';
+import { parseProtocolArray } from './protocol.js';
 
 export function parseCF4Response(data: string): DiscoveredDevice | null {
   // Expected: ["CF4","4","<device_id>","<device_name>","<ip>","OK"]
-  // or variations like ["CF4","1","<device_id>","<device_name>","<ip>"]
-  const trimmed = data.trim();
-  if (!trimmed.startsWith('["CF4"')) {
-    return null;
-  }
-
-  try {
-    const inner = trimmed.slice(1, -1);
-    const parts = inner.split('","');
-    parts[0] = parts[0].replace(/^"/, '');
-    parts[parts.length - 1] = parts[parts.length - 1].replace(/"$/, '');
-
-    if (parts.length < 5) {
-      return null;
-    }
-
-    return {
-      id: parts[2],
-      name: parts[3],
-      ip: parts[4],
-    };
-  } catch {
-    return null;
-  }
+  const parts = parseProtocolArray(data, 'CF4');
+  if (!parts || parts.length < 5) return null;
+  return { id: parts[2], name: parts[3], ip: parts[4] };
 }
 
 function attemptDiscovery(timeout: number): Promise<DiscoveredDevice | null> {

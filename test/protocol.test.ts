@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  parseProtocolArray,
   signed16,
   applyPosPunto,
   parse2WLResponse,
@@ -18,6 +19,30 @@ import {
   buildCCSEnableCommand,
 } from '../src/protocol.js';
 import type { CronoSchedule } from '../src/types.js';
+
+describe('parseProtocolArray', () => {
+  it('parses valid array with matching prefix', () => {
+    const result = parseProtocolArray('["2WL","3","AA","BB","CC"]', '2WL');
+    assert.deepEqual(result, ['2WL', '3', 'AA', 'BB', 'CC']);
+  });
+
+  it('returns null for non-matching prefix', () => {
+    assert.equal(parseProtocolArray('["2WL","0"]', 'CCG'), null);
+  });
+
+  it('returns null for empty string', () => {
+    assert.equal(parseProtocolArray('', '2WL'), null);
+  });
+
+  it('handles whitespace around input', () => {
+    const result = parseProtocolArray('  ["CF4","1","id"]  ', 'CF4');
+    assert.deepEqual(result, ['CF4', '1', 'id']);
+  });
+
+  it('returns null for malformed input', () => {
+    assert.equal(parseProtocolArray('not json', 'X'), null);
+  });
+});
 
 describe('signed16', () => {
   it('positive value stays positive', () => {

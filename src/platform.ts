@@ -18,7 +18,7 @@ import { StoveAccessory } from './stoveAccessory.js';
 const require = createRequire(import.meta.url);
 const { version: PLUGIN_VERSION } = require('../package.json') as { version: string };
 
-const BACKOFF_STEPS = [5, 10, 30, 60];
+const BACKOFF_STEPS = [5, 10, 30, 60, 120, 300];
 
 export class FourHeatPlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
@@ -132,12 +132,33 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     try {
       const state = await this.client.readStatus();
       if (state) {
+        const wasUnreachable = this.consecutiveFailures >= 3;
         if (this.consecutiveFailures > 0) {
           this.log.info('Connection restored after %d failures', this.consecutiveFailures);
+          if (!this.pollingTimer) {
+            const interval = (this.config.pollingInterval ?? DEFAULT_POLLING_INTERVAL) * 1000;
+            this.pollingTimer = setInterval(() => this.poll(), interval);
+            this.log.info('Regular polling resumed');
+          }
         }
         this.consecutiveFailures = 0;
+        if (this.backoffTimer) {
+          clearTimeout(this.backoffTimer);
+          this.backoffTimer = null;
+        }
         this.deviceState = state;
         this.stoveAccessory?.updateState(state);
+
+        // After prolonged outage, re-push state to HomeKit with a delay
+        // to ensure HAP connection is fully re-established
+        if (wasUnreachable) {
+          setTimeout(() => {
+            if (this.deviceState) {
+              this.stoveAccessory?.updateState(this.deviceState);
+              this.log.info('Re-pushed state to HomeKit after outage recovery');
+            }
+          }, 5000);
+        }
 
         if (this.config.cronoSwitch) {
           this.pollCount++;
@@ -184,14 +205,30 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     this.consecutiveFailures++;
     const backoffIndex = Math.min(this.consecutiveFailures - 1, BACKOFF_STEPS.length - 1);
     const backoffSeconds = BACKOFF_STEPS[backoffIndex];
-    this.log.warn('Poll failed (%d consecutive). Next retry in %ds.', this.consecutiveFailures, backoffSeconds);
 
-    // Schedule an extra retry with backoff (in addition to the regular interval)
+    // After 3 consecutive failures, stop the regular polling interval
+    // to avoid hammering the device — rely only on backoff retries
+    if (this.consecutiveFailures >= 3 && this.pollingTimer) {
+      clearInterval(this.pollingTimer);
+      this.pollingTimer = null;
+      this.log.warn('Poll failed (%d consecutive). Regular polling paused. Retrying in %ds.', this.consecutiveFailures, backoffSeconds);
+    } else {
+      this.log.warn('Poll failed (%d consecutive). Next retry in %ds.', this.consecutiveFailures, backoffSeconds);
+    }
+
     if (this.backoffTimer) clearTimeout(this.backoffTimer);
     this.backoffTimer = setTimeout(() => this.poll(), backoffSeconds * 1000);
   }
 
+  get isDeviceUnreachable(): boolean {
+    return this.consecutiveFailures >= 3;
+  }
+
   async writeParameter(paramId: number, value: number): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot write parameter: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     const param = this.deviceState?.parameters.get(paramId);
     if (!param) {
       this.log.warn('Parameter 0x%s not found in device state', paramId.toString(16));
@@ -199,13 +236,16 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
     }
     const success = await this.client.writeParameter(param.originalHex, value);
     if (success) {
-      // Refresh state after write
       await this.poll();
     }
     return success;
   }
 
   async turnOn(): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot turn on: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     if (this.deviceState?.stato === STATO.BLOCK) {
       this.log.info('Stove is blocked, resetting error before turning on...');
       await this.client.resetError();
@@ -224,6 +264,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   }
 
   async turnOff(): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot turn off: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     const success = await this.client.turnOff();
     if (success) {
       await this.poll();
@@ -232,6 +276,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   }
 
   async resetError(): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot reset error: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     const success = await this.client.resetError();
     if (success) {
       await this.poll();
@@ -260,6 +308,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   }
 
   async enableCrono(): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot enable crono: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     if (!this.cachedSchedule) {
       await this.refreshSchedule();
     }
@@ -288,6 +340,10 @@ export class FourHeatPlatform implements DynamicPlatformPlugin {
   }
 
   async disableCrono(): Promise<boolean> {
+    if (this.isDeviceUnreachable) {
+      this.log.warn('Cannot disable crono: device unreachable (%d consecutive failures)', this.consecutiveFailures);
+      return false;
+    }
     if (!this.cachedSchedule) {
       await this.refreshSchedule();
     }

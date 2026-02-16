@@ -6,6 +6,15 @@ import type { FourHeatPlatform } from './platform.js';
 import { DEFAULT_SWITCH_DEBOUNCE } from './settings.js';
 
 export class StoveAccessory {
+  /** Throw in onGet to signal "No Response" in HomeKit */
+  private throwIfUnreachable(): void {
+    if (this.platform.isDeviceUnreachable) {
+      throw new this.platform.api.hap.HapStatusError(
+        this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE,
+      );
+    }
+  }
+
   private static readonly HEATING_STATES: Set<number> = new Set([
     STATO.CHECK_UP,
     STATO.IGNITION,
@@ -76,7 +85,10 @@ export class StoveAccessory {
 
     this.thermostatService.getCharacteristic(Characteristic.TemperatureDisplayUnits)
       .setProps({ validValues: [Characteristic.TemperatureDisplayUnits.CELSIUS] })
-      .onGet(() => Characteristic.TemperatureDisplayUnits.CELSIUS);
+      .onGet(() => {
+        this.throwIfUnreachable();
+        return Characteristic.TemperatureDisplayUnits.CELSIUS;
+      });
 
     this.thermostatService.addOptionalCharacteristic(Characteristic.StatusFault);
     this.thermostatService.getCharacteristic(Characteristic.StatusFault)
@@ -184,6 +196,7 @@ export class StoveAccessory {
   }
 
   private getSensorValue(meta: SensorMeta): number {
+    this.throwIfUnreachable();
     const state = this.platform.deviceState;
     const sensor = state?.sensors.get(meta.id);
     if (!sensor || !state) {
@@ -337,11 +350,13 @@ export class StoveAccessory {
   }
 
   private getCurrentHeatingState(): number {
+    this.throwIfUnreachable();
     const stato = this.platform.deviceState?.stato ?? 0;
     return this.mapCurrentState(stato);
   }
 
   private getTargetHeatingState(): number {
+    this.throwIfUnreachable();
     const { Characteristic } = this.platform;
     if (this.targetOverride !== null && Date.now() <= this.targetOverrideExpiry) {
       return this.targetOverride;
@@ -411,10 +426,12 @@ export class StoveAccessory {
   }
 
   private getCurrentTemperature(): number {
+    this.throwIfUnreachable();
     return this.platform.deviceState?.tempPrinc ?? 0;
   }
 
   private getTargetTemperature(): number {
+    this.throwIfUnreachable();
     const param = this.platform.deviceState?.parameters.get(PARAM_TEMP_SETPOINT);
     return param?.value ?? this.platform.minTemp;
   }
@@ -426,6 +443,7 @@ export class StoveAccessory {
   }
 
   private getStatusFault(): number {
+    this.throwIfUnreachable();
     const { Characteristic } = this.platform;
     const stato = this.platform.deviceState?.stato ?? 0;
     return this.isInFaultState(stato)
@@ -456,6 +474,7 @@ export class StoveAccessory {
   }
 
   private getSmokeDetected(): number {
+    this.throwIfUnreachable();
     const { Characteristic } = this.platform;
     const stato = this.platform.deviceState?.stato ?? 0;
     return this.isInFaultState(stato)
@@ -487,6 +506,7 @@ export class StoveAccessory {
   }
 
   private getCronoOn(): boolean {
+    this.throwIfUnreachable();
     const statoCrono = this.platform.deviceState?.statoCrono ?? STATO_CRONO.OFF;
     return statoCrono !== STATO_CRONO.OFF && statoCrono !== 0;
   }

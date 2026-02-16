@@ -26,6 +26,7 @@ export declare class FourHeatPlatform implements DynamicPlatformPlugin {
     private startPolling;
     private poll;
     private handlePollFailure;
+    get isDeviceUnreachable(): boolean;
     writeParameter(paramId: number, value: number): Promise<boolean>;
     turnOn(): Promise<boolean>;
     turnOff(): Promise<boolean>;

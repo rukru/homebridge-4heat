@@ -4,6 +4,8 @@ import type { FourHeatPlatform } from './platform.js';
 export declare class StoveAccessory {
     private readonly platform;
     private readonly accessory;
+    /** Throw in onGet to signal "No Response" in HomeKit */
+    private throwIfUnreachable;
     private static readonly HEATING_STATES;
     private static readonly TARGET_OVERRIDE_TTL;
     private readonly thermostatService;

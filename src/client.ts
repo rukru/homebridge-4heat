@@ -57,11 +57,14 @@ export class FourHeatClient {
       const socket = new net.Socket();
       let data = '';
       let resolved = false;
+      let destroyTimer: ReturnType<typeof setTimeout> | null = null;
 
       const finish = (result: string | null) => {
         if (resolved) return;
         resolved = true;
-        socket.destroy();
+        // Graceful close: send FIN, then force-destroy after 1s as fallback
+        socket.end();
+        destroyTimer = setTimeout(() => socket.destroy(), 1000);
         resolve(result);
       };
 
@@ -72,11 +75,24 @@ export class FourHeatClient {
       });
 
       socket.on('end', () => finish(data || null));
-      socket.on('close', () => finish(data || null));
-      socket.on('timeout', () => finish(null));
+      socket.on('close', () => {
+        if (destroyTimer) clearTimeout(destroyTimer);
+        if (!resolved) {
+          resolved = true;
+          resolve(data || null);
+        }
+      });
+      socket.on('timeout', () => {
+        this.tcpLog('TCP timeout after %dms', this.timeout);
+        finish(null);
+      });
       socket.on('error', (err) => {
         this.tcpLog('TCP error: %s', err.message);
-        finish(null);
+        if (!resolved) {
+          resolved = true;
+          socket.destroy();
+          resolve(null);
+        }
       });
 
       socket.connect(this.port, host, () => {
